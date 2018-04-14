@@ -963,7 +963,12 @@ void Lua_V1::StopActorChore() {
 
 	if (lua_isnumber(choreObj)) {
 		int chore = (int)lua_getnumber(choreObj);
-		costume->stopChore(chore);
+		if (chore == 38 && costume->getFilename().equals("mn2.cos")) {
+			costume->stopChores();
+		}
+		else {
+			costume->stopChore(chore);
+		}
 	} else if (lua_isnil(choreObj)) {
 		costume->stopChores();
 	}
