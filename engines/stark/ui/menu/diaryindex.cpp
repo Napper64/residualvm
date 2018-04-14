@@ -24,7 +24,7 @@
 
 #include "engines/stark/gfx/driver.h"
 #include "engines/stark/services/services.h"
-#include "engines/stark/services/global.h"
+#include "engines/stark/services/diary.h"
 #include "engines/stark/services/userinterface.h"
 #include "engines/stark/ui/cursor.h"
 
@@ -79,7 +79,7 @@ void DiaryIndexScreen::open() {
 			"Diary",
 			nullptr,
 			MOVE_HANDLER(DiaryIndexScreen, widgetTextColorHandler)));
-	_widgets.back()->setVisible(StarkGlobal->hasInventoryItem("Diary"));
+	_widgets.back()->setVisible(StarkDiary->isEnabled());
 
 	_widgets.push_back(new StaticLocationWidget(
 			"Return",
@@ -99,6 +99,13 @@ void DiaryIndexScreen::open() {
 	for (uint i = 1; i < _widgets.size(); i++) {
 		// The background image is intentionally ignored
 		_widgets[i]->setupSounds(0, 1);
+	}
+}
+
+void DiaryIndexScreen::onScreenChanged() {
+	for (uint i = 1; i < _widgets.size(); i++) {
+		// The background image is intentionally ignored
+		_widgets[i]->resetTextTexture();
 	}
 }
 

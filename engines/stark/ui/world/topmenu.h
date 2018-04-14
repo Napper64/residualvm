@@ -40,7 +40,7 @@ class Sound;
 class TopMenu : public Window {
 public:
 	TopMenu(Gfx::Driver *gfx, Cursor *cursor);
-	~TopMenu();
+	~TopMenu() override;
 
 	// Window API
 	void onRender() override;
@@ -53,15 +53,22 @@ public:
 	/** A new item has been added to the player's inventory. Play relevant animation */
 	void notifyInventoryItemEnabled(uint16 itemIndex);
 
+	/** A new entry has been added to the player's diary. Play relevant animation */
+	void notifyDiaryEntryEnabled();
+
 private:
 	Button *getButtonAtPosition(const Common::Point &point) const;
+	bool isAnimationPlaying() const;
+	void updateAnimations();
 
 	bool _widgetsVisible;
 
 	Button *_inventoryButton;
 	Button *_exitButton;
 	Button *_optionsButton;
-	int _forceVisibleTimeRemaining;
+	int _newInventoryItemExplosionAnimTimeRemaining;
+	int _newInventoryItemChestClosingAnimTimeRemaining;
+	int _newDiaryEntryAnimTimeRemaining;
 	Resources::Sound *_inventoryNewItemSound;
 };
 

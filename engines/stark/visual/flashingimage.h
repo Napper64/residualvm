@@ -20,70 +20,62 @@
  *
  */
 
-#ifndef STARK_UI_CURSOR_H
-#define STARK_UI_CURSOR_H
+#ifndef STARK_VISUAL_FLASHING_IMAGE_H
+#define STARK_VISUAL_FLASHING_IMAGE_H
 
+#include "engines/stark/visual/visual.h"
+
+#include "common/array.h"
 #include "common/rect.h"
-#include "common/scummsys.h"
+
+#include "graphics/pixelformat.h"
+
+#include "math/vector2d.h"
+
+namespace Graphics {
+struct Surface;
+}
 
 namespace Stark {
 
-class VisualImageXMG;
-class VisualText;
-
 namespace Gfx {
 class Driver;
+class SurfaceRenderer;
+class Texture;
 }
 
 /**
- * Manager for the current game Cursor
+ * An image with an animated flashing effect
+ *
+ * Used by the top bar when a new entry has been added to the player's diary
  */
-class Cursor {
+class VisualFlashingImage : public Visual {
 public:
-	explicit Cursor(Gfx::Driver *gfx);
-	~Cursor();
+	static const VisualType TYPE = Visual::kFlashingImage;
 
-	/** Render the Cursor */
-	void render();
+	explicit VisualFlashingImage(Gfx::Driver *gfx);
+	~VisualFlashingImage() override;
 
-	/** Update the mouse position */
-	void setMousePosition(const Common::Point &pos);
+	/** Prepare flashing the specified image */
+	void initFromSurface(const Graphics::Surface *surface);
 
-	/** Make cycle the cursor's brightness */
-	void setFading(bool fading);
+	/** Render the image at the specified position */
+	void render(const Common::Point &position);
 
-	Common::Point getMousePosition(bool unscaled = false) const;
-
-	enum CursorType {
-		kImage = -1,
-		kDefault = 0,
-		kActive = 3,
-		kPassive = 9,
-		kEye = 10,
-		kHand = 11,
-		kMouth = 12
-	};
-
-	void setCursorType(CursorType type);
-	void setCursorImage(VisualImageXMG *image);
-	void setMouseHint(const Common::String &hint);
 private:
 	void updateFadeLevel();
 
 	Gfx::Driver *_gfx;
+	Gfx::SurfaceRenderer *_surfaceRenderer;
+	Gfx::Texture *_texture;
 
-	Common::String _currentHint;
-	Common::Point _mousePos;
-	VisualImageXMG *_cursorImage;
-	VisualText *_mouseText;
-	CursorType _currentCursorType;
-
-	bool _fading;
+	int _flashingTimeRemaining;
 	float _fadeLevel;
 	bool _fadeLevelIncreasing;
 	static const float _fadeValueMax;
+
 };
 
 } // End of namespace Stark
 
-#endif // STARK_UI_CURSOR_H
+#endif // STARK_VISUAL_FLASHING_IMAGE_H

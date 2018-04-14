@@ -21,7 +21,6 @@
  */
 
 #include "engines/stark/ui/world/dialogpanel.h"
-#include "engines/stark/ui/world/clicktext.h"
 
 #include "engines/stark/gfx/driver.h"
 
@@ -30,6 +29,9 @@
 #include "engines/stark/services/services.h"
 #include "engines/stark/services/staticprovider.h"
 #include "engines/stark/services/dialogplayer.h"
+
+#include "engines/stark/ui/cursor.h"
+#include "engines/stark/ui/world/clicktext.h"
 
 #include "engines/stark/visual/image.h"
 #include "engines/stark/visual/text.h"
@@ -63,7 +65,19 @@ DialogPanel::DialogPanel(Gfx::Driver *gfx, Cursor *cursor) :
 
 DialogPanel::~DialogPanel() {
 	clearOptions();
+	clearSubtitleVisual();
+}
+
+void DialogPanel::abortCurrentSpeech() {
+	if (_currentSpeech) {
+		_currentSpeech->stop();
+		_currentSpeech = nullptr;
+	}
+}
+
+void DialogPanel::clearSubtitleVisual() {
 	delete _subtitleVisual;
+	_subtitleVisual = nullptr;
 }
 
 void DialogPanel::clearOptions() {
@@ -109,8 +123,7 @@ void DialogPanel::onRender() {
 	if (!_currentSpeech || !_currentSpeech->isPlaying()) {
 		_currentSpeech = nullptr;
 
-		delete _subtitleVisual;
-		_subtitleVisual = nullptr;
+		clearSubtitleVisual();
 	}
 
 	// Update the dialog engine
@@ -143,7 +156,7 @@ void DialogPanel::onRender() {
 }
 
 void DialogPanel::updateSubtitleVisual() {
-	delete _subtitleVisual;
+	clearSubtitleVisual();
 
 	uint32 color = _otherColor;
 	if (_currentSpeech->characterIsApril())
@@ -168,10 +181,25 @@ void DialogPanel::updateDialogOptions() {
 }
 
 void DialogPanel::onMouseMove(const Common::Point &pos) {
-	if (!_options.empty() && _options.size() > 0) {
+	if (_subtitleVisual) {
+		_cursor->setCursorType(Cursor::kDefault);
+	} else if (!_options.empty()) {
 		for (uint i = _firstVisibleOption; i < _options.size(); i++) {
 			_options[i]->handleMouseMove(pos);
 		}
+
+		int hoveredOption = getHoveredOption(pos);
+		if (hoveredOption >= 0) {
+			_cursor->setCursorType(Cursor::kActive);
+		} else if (_scrollUpArrowVisible && _scrollUpArrowRect.contains(pos)) {
+			_cursor->setCursorType(Cursor::kActive);
+		} else if (_scrollDownArrowVisible && _scrollDownArrowRect.contains(pos)) {
+			_cursor->setCursorType(Cursor::kActive);
+		} else {
+			_cursor->setCursorType(Cursor::kDefault);
+		}
+	} else {
+		_cursor->setCursorType(Cursor::kDefault);
 	}
 }
 
@@ -193,15 +221,16 @@ void DialogPanel::onClick(const Common::Point &pos) {
 	}
 }
 
-void DialogPanel::reset() {
-	if (_currentSpeech) {
-		_currentSpeech->stop();
-		_currentSpeech = nullptr;
+void DialogPanel::onRightClick(const Common::Point &pos) {
+	if (_currentSpeech && _currentSpeech->isPlaying()) {
+		abortCurrentSpeech();
+		clearSubtitleVisual();
 	}
+}
 
-	delete _subtitleVisual;
-	_subtitleVisual = nullptr;
-
+void DialogPanel::reset() {
+	abortCurrentSpeech();
+	clearSubtitleVisual();
 	clearOptions();
 
 	StarkDialogPlayer->reset();
@@ -224,8 +253,9 @@ void DialogPanel::scrollOptions(int increment) {
 void DialogPanel::onScreenChanged() {
 	if (_currentSpeech) {
 		updateSubtitleVisual();
+	} else {
+		updateDialogOptions();
 	}
-	updateDialogOptions();
 }
 
 } // End of namespace Stark

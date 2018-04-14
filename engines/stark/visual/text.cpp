@@ -113,7 +113,7 @@ void VisualText::createTexture() {
 
 	// Create a surface to render to
 	Graphics::Surface surface;
-	surface.create(scaledRect.width(), scaledRect.height(), _gfx->getRGBAPixelFormat());
+	surface.create(scaledRect.width(), scaledRect.height(), Gfx::Driver::getRGBAPixelFormat());
 	surface.fillRect(scaledRect, _backgroundColor);
 
 	// Render the lines to the surface
@@ -137,6 +137,11 @@ void VisualText::render(const Common::Point &position) {
 	}
 
 	_surfaceRenderer->render(_texture, position);
+}
+
+void VisualText::resetTexture() {
+	freeTexture();
+	createTexture();
 }
 
 } // End of namespace Stark

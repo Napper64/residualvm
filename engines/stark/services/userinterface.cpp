@@ -171,7 +171,9 @@ void UserInterface::render() {
 	_currentScreen->render();
 
 	// The cursor depends on the UI being done.
-	_cursor->render();
+	if (_currentScreen->getName() != Screen::kScreenFMV) {
+		_cursor->render();
+	}
 }
 
 bool UserInterface::isInteractive() const {
@@ -245,10 +247,15 @@ const Graphics::Surface *UserInterface::getGameWindowThumbnail() const {
 
 void UserInterface::onScreenChanged() {
 	_gameScreen->onScreenChanged();
+	_diaryIndexScreen->onScreenChanged();
 }
 
 void UserInterface::notifyInventoryItemEnabled(uint16 itemIndex) {
 	_gameScreen->notifyInventoryItemEnabled(itemIndex);
+}
+
+void UserInterface::notifyDiaryEntryEnabled() {
+	_gameScreen->notifyDiaryEntryEnabled();
 }
 
 } // End of namespace Stark
