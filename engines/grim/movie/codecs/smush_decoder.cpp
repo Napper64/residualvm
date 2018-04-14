@@ -195,7 +195,13 @@ bool SmushDecoder::readHeader() {
 		int width = _file->readUint16LE();
 		int height = _file->readUint16LE();
 		_file->readUint16LE();
-		int frameRate = SMUSH_SPEED;
+		int frameRate;
+		if(width == 640 && height == 480 && size==1062 && (nbFrames==30|| nbFrames==49)){
+			frameRate = SMUSH_SPEED;
+		}
+		else {
+			frameRate = _file->readUint32LE();
+		}
 
 		int16 flags = _file->readUint16LE();
 		// Output information for checking out the flags
