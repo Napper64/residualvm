@@ -39,7 +39,8 @@ Light::Light(Object *parent, byte subType, uint16 index, const Common::String &n
 		_innerConeAngle(0),
 		_falloffNear(100.0),
 		_falloffFar(500.0),
-		_lightEntry(nullptr) {
+		_lightEntry(nullptr),
+		_multiplier(1.0) {
 	_type = TYPE;
 }
 
@@ -47,12 +48,12 @@ void Light::readData(Formats::XRCReadStream *stream) {
 	_color = stream->readVector3();
 	_position = stream->readVector3();
 	_direction = stream->readVector3();
-	_outerConeAngle = stream->readFloat();
-	_innerConeAngle = stream->readFloat();
+	_outerConeAngle = stream->readFloatLE();
+	_innerConeAngle = stream->readFloatLE();
 
 	if (stream->isDataLeft()) {
-		_falloffNear = stream->readFloat();
-		_falloffFar = stream->readFloat();
+		_falloffNear = stream->readFloatLE();
+		_falloffFar = stream->readFloatLE();
 	}
 }
 
@@ -67,7 +68,8 @@ void Light::onPostRead() {
 	_lightEntry->falloffNear = _falloffNear;
 	_lightEntry->falloffFar = _falloffFar;
 
-	// TODO: Add support for negative lights
+	// Negative lights add darkness
+	_multiplier = _name.hasPrefix("x_neg") ? -1.0 : 1.0;
 }
 
 void Light::saveLoad(ResourceSerializer *serializer) {
@@ -88,7 +90,7 @@ void Light::setPosition(const Math::Vector3d &position) {
 }
 
 Gfx::LightEntry *Light::getLightEntry() {
-	_lightEntry->color = _color;
+	_lightEntry->color = _multiplier * _color;
 	_lightEntry->position = _position;
 
 	return _lightEntry;
