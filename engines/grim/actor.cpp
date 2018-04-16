@@ -141,7 +141,12 @@ void Actor::saveState(SaveGame *savedState) const {
 	savedState->writeBool(_followBoxes);
 	savedState->writeFloat(_reflectionAngle);
 	savedState->writeBool(_visible);
-	savedState->writeBool(_lookingMode);
+	if (getName().equals("Olivia")) {
+		savedState->writeBool(false);
+	}
+	else {
+		savedState->writeBool(_lookingMode);
+	}
 	savedState->writeFloat(_scale);
 	savedState->writeFloat(_timeScale);
 	savedState->writeBool(_puckOrient);
