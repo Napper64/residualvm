@@ -71,7 +71,7 @@ private:
 	Marker *_markers;
 
 	struct KeyframeEntry {
-		void loadBinary(Common::SeekableReadStream *data);
+		void loadBinary(Common::SeekableReadStream *data, char *meshName, Common::String *fname);
 
 		float _frame;
 		int _flags;
@@ -80,7 +80,7 @@ private:
 	};
 
 	struct KeyframeNode {
-		void loadBinary(Common::SeekableReadStream *data, char *meshName);
+		void loadBinary(Common::SeekableReadStream *data, char *meshName, Common::String *fname);
 		void loadText(TextSplitter &ts);
 		~KeyframeNode();
 

@@ -113,7 +113,7 @@ void KeyframeAnim::loadBinary(Common::SeekableReadStream *data) {
 			continue;
 		}
 		_nodes[nodeNum] = new KeyframeNode();
-		_nodes[nodeNum]->loadBinary(data, nameHandle);
+		_nodes[nodeNum]->loadBinary(data, nameHandle,&_fname);
 	}
 }
 
@@ -208,7 +208,7 @@ int KeyframeAnim::getMarker(float startTime, float stopTime) const {
 	return 0;
 }
 
-void KeyframeAnim::KeyframeEntry::loadBinary(Common::SeekableReadStream *data) {
+void KeyframeAnim::KeyframeEntry::loadBinary(Common::SeekableReadStream *data,char *meshName, Common::String *fname) {
 	_frame = data->readFloatLE();
 	_flags = data->readUint32LE();
 	_pos.readFromStream(data);
@@ -219,16 +219,34 @@ void KeyframeAnim::KeyframeEntry::loadBinary(Common::SeekableReadStream *data) {
 	_dpitch = data->readFloatLE();
 	_dyaw = data->readFloatLE();
 	_droll = data->readFloatLE();
+	if (_frame == 20 && strcmp(meshName, "shldr_R1") == 0 && (*fname).equals("bo_coffin_3_you.key")) {
+		_frame = 19;
+		_yaw = 0.575867057;
+		_roll = 239.649811;
+		_dpitch = 16.0314026;
+		_dyaw = 3.32916307;
+		_droll = 3.36254883;
+		_pitch = 69.6633148;
+	}
+	if (_frame == 36 && strcmp(meshName, "shldr_L1") == 0 && (*fname).equals("bo_coffin_5_mug.key")) {
+		_frame = 35;
+		_yaw = 150.390915;
+		_roll = 49.3095093;
+		_dpitch = 0.790283203;
+		_dyaw = 11.4147644;
+		_droll = 4.47042847;
+		_pitch = 284.761108;
+	}
 }
 
-void KeyframeAnim::KeyframeNode::loadBinary(Common::SeekableReadStream *data, char *meshName) {
+void KeyframeAnim::KeyframeNode::loadBinary(Common::SeekableReadStream *data, char *meshName, Common::String *fname) {
 	memcpy(_meshName, meshName, 32);
 
 	_numEntries = data->readUint32LE();
 	data->seek(4, SEEK_CUR);
 	_entries = new KeyframeEntry[_numEntries];
 	for (int i = 0; i < _numEntries; i++) {
-		_entries[i].loadBinary(data);
+		_entries[i].loadBinary(data, meshName,fname);
 	}
 }
 
