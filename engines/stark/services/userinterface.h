@@ -25,8 +25,11 @@
 
 #include "engines/stark/ui/screen.h"
 
+#include "engines/stark/services/gamemessage.h"
+
 #include "common/rect.h"
 #include "common/str-array.h"
+#include "common/stack.h"
 
 namespace Common {
 class SeekableReadStream;
@@ -45,6 +48,13 @@ class Driver;
 
 class DiaryIndexScreen;
 class GameScreen;
+class MainMenuScreen;
+class SettingsMenuScreen;
+class SaveMenuScreen;
+class LoadMenuScreen;
+class FMVMenuScreen;
+class DiaryPagesScreen;
+class DialogScreen;
 class Cursor;
 class FMVScreen;
 
@@ -60,9 +70,11 @@ public:
 	void update();
 	void render();
 	void handleMouseMove(const Common::Point &pos);
+	void handleMouseUp();
 	void handleClick();
 	void handleRightClick();
 	void handleDoubleClick();
+	void handleEscape();
 	void notifyShouldExit() { _exitGame = true; }
 	void inventoryOpen(bool open);
 	bool shouldExit() { return _exitGame; }
@@ -83,8 +95,25 @@ public:
 	/** Set the currently displayed screen */
 	void changeScreen(Screen::Name screenName);
 
+	/** Back to the previous displayed screen */
+	void backPrevScreen();
+
+	/** Back to the main menu screen and rest resources */
+	void requestQuitToMainMenu() { _quitToMainMenu = true; }
+	bool hasQuitToMainMenuRequest() { return _quitToMainMenu; }
+	void performQuitToMainMenu();
+
+	/** Restore the screen travelling history to the initial state*/
+	void restoreScreenHistory();
+
 	/** Is the game screen currently displayed? */
 	bool isInGameScreen() const;
+
+	/** Is the save & load menu screen currently displayed? */
+	bool isInSaveLoadMenuScreen() const;
+
+	/** Is the diary index screen currently displayed? */
+	bool isInDiaryIndexScreen() const;
 
 	/** Is the inventory panel being displayed? */
 	bool isInventoryOpen() const;
@@ -129,6 +158,44 @@ public:
 	/** Get the currently stored game screen thumbnail, returns nullptr if there is not thumbnail stored */
 	const Graphics::Surface *getGameWindowThumbnail() const;
 
+	/** Display a message dialog, return true when the left button is pressed, and false for the right button */
+	bool confirm(const Common::String &msg, const Common::String &leftBtnMsg, const Common::String &rightBtnMsg);
+	bool confirm(const Common::String &msg);
+	bool confirm(GameMessage::TextKey key);
+
+	/** Directly open or close a screen */
+	void toggleScreen(Screen::Name screenName);
+
+	/** Toggle subtitles on and off */
+	void requestToggleSubtitle() { _shouldToggleSubtitle = !_shouldToggleSubtitle; }
+	bool hasToggleSubtitleRequest() { return _shouldToggleSubtitle; }
+	void performToggleSubtitle();
+
+	/** Cycle back or forward through inventory cursor items */
+	void cycleBackInventory() { cycleInventory(false); }
+	void cycleForwardInventory() { cycleInventory(true); }
+
+	/** Scroll the inventory up or down */
+	void scrollInventoryUp();
+	void scrollInventoryDown();
+
+	/** Scroll the dialog options up or down */
+	void scrollDialogUp();
+	void scrollDialogDown();
+
+	/** Focus on the next or previous dialog option */
+	void focusNextDialogOption();
+	void focusPrevDialogOption();
+
+	/** Select the focused dialog option */
+	void selectFocusedDialogOption();
+
+	/** Directly select a dialog option by index */
+	void selectDialogOptionByIndex(uint index);
+
+	/** Toggle the display of exit locations */
+	void toggleExitDisplay();
+
 	static const uint kThumbnailWidth = 160;
 	static const uint kThumbnailHeight = 92;
 	static const uint kThumbnailSize = kThumbnailWidth * kThumbnailHeight * 4;
@@ -136,17 +203,30 @@ public:
 private:
 	Screen *getScreenByName(Screen::Name screenName) const;
 
+	void cycleInventory(bool forward);
+
 	GameScreen *_gameScreen;
 	FMVScreen *_fmvScreen;
 	DiaryIndexScreen *_diaryIndexScreen;
+	MainMenuScreen *_mainMenuScreen;
+	SettingsMenuScreen *_settingsMenuScreen;
+	SaveMenuScreen *_saveMenuScreen;
+	LoadMenuScreen *_loadMenuScreen;
+	FMVMenuScreen *_fmvMenuScreen;
+	DiaryPagesScreen *_diaryPagesScreen;
+	DialogScreen *_dialogScreen;
 	Screen *_currentScreen;
+	Common::Stack<Screen::Name> _prevScreenNameStack;
 
 	Gfx::Driver *_gfx;
 	Cursor *_cursor;
 	bool _exitGame;
+	bool _quitToMainMenu;
 
 	bool _interactive;
 	bool _interactionAttemptDenied;
+
+	bool _shouldToggleSubtitle;
 
 	Graphics::Surface *_gameWindowThumbnail;
 };

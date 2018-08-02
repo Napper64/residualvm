@@ -58,8 +58,13 @@ public:
 		kTextScrollUpArrow = 6,
 		kTextScrollDownArrow = 7,
 		kQuit = 8,
+		kCheckMark = 13,
+		kVolume = 14,
 		kDiaryNormal = 15,
 		kInventory = 16,
+		kExitArrow = 17,
+		kExitArrowLeft = 18,
+		kExitArrowRight = 19,
 		kTextBackgroundActive = 20,
 		kTextBackgroundPassive = 21,
 		kDiaryTabbed = 22
@@ -91,6 +96,7 @@ public:
 
 	/** Get an image for a static UI element */
 	VisualImageXMG *getUIElement(UIElement element) const;
+	VisualImageXMG *getUIElement(UIElement element, uint32 index) const;
 
 	/** Get an image for a static UI element */
 	VisualImageXMG *getUIImage(UIImage image) const;

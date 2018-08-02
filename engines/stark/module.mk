@@ -79,6 +79,9 @@ MODULE_OBJS := \
 	services/stateprovider.o \
 	services/staticprovider.o \
 	services/userinterface.o \
+	services/settings.o \
+	services/gamechapter.o \
+	services/gamemessage.o \
 	stark.o \
 	tools/abstractsyntaxtree.o \
 	tools/block.o \
@@ -87,6 +90,12 @@ MODULE_OBJS := \
 	ui/cursor.o \
 	ui/menu/diaryindex.o \
 	ui/menu/locationscreen.o \
+	ui/menu/mainmenu.o \
+	ui/menu/settingsmenu.o \
+	ui/menu/saveloadmenu.o \
+	ui/menu/fmvmenu.o \
+	ui/menu/diarypages.o \
+	ui/menu/dialogmenu.o \
 	ui/window.o \
 	ui/world/actionmenu.o \
 	ui/world/button.o \

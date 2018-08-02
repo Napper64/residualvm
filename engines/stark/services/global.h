@@ -99,9 +99,7 @@ public:
 	/** Retrieve the current chapter number from the global resource tree */
 	int32 getCurrentChapter();
 
-	/** Temporary HACK to allow us to query the inventory */
-	void printInventory(bool printAll);
-	void enableInventoryItem(int32 num);
+	/** Check if the player has an inventory item using its name  */
 	bool hasInventoryItem(const Common::String &itemName) const;
 
 	/** Change the current chapter */

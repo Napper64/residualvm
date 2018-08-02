@@ -67,6 +67,7 @@ public:
 	void onPreDestroy() override;
 	void onGameLoop() override;
 	void saveLoadCurrent(ResourceSerializer *serializer) override;
+	void onEnginePause(bool pause) override;
 
 	/** Start playing the sound */
 	void play();
@@ -82,6 +83,9 @@ public:
 
 	/** Fade the sound's current volume and pan to the specified target over duration milliseconds */
 	void changeVolumePan(int32 volume, int32 pan, int32 duration);
+
+	/** Set whether to loop or not */
+	void setLooping(bool looping) { _looping = looping; }
 
 protected:
 	void printData() override;

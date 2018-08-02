@@ -24,6 +24,7 @@
 
 #include "engines/stark/services/services.h"
 #include "engines/stark/services/userinterface.h"
+#include "engines/stark/services/global.h"
 
 #include "engines/stark/ui/cursor.h"
 #include "engines/stark/ui/world/actionmenu.h"
@@ -31,6 +32,9 @@
 #include "engines/stark/ui/world/gamewindow.h"
 #include "engines/stark/ui/world/inventorywindow.h"
 #include "engines/stark/ui/world/topmenu.h"
+
+#include "engines/stark/resources/level.h"
+#include "engines/stark/resources/location.h"
 
 namespace Stark {
 
@@ -62,11 +66,13 @@ GameScreen::~GameScreen() {
 }
 
 void GameScreen::open() {
+	pauseGame(false);
 	StarkUserInterface->freeGameScreenThumbnail();
 }
 
 void GameScreen::close() {
 	_cursor->setMouseHint("");
+	pauseGame(true);
 	StarkUserInterface->saveGameScreenThumbnail();
 }
 
@@ -88,6 +94,10 @@ void GameScreen::reset() {
 
 GameWindow *GameScreen::getGameWindow() const {
 	return _gameWindow;
+}
+
+DialogPanel *GameScreen::getDialogPanel() const {
+	return _dialogPanel;
 }
 
 void GameScreen::handleMouseMove() {
@@ -116,8 +126,10 @@ void GameScreen::dispatchEvent(WindowHandler handler) {
 }
 
 void GameScreen::onScreenChanged() {
+	_cursor->onScreenChanged();
 	_dialogPanel->onScreenChanged();
 	_topMenu->onScreenChanged();
+	_gameWindow->onScreenChanged();
 }
 
 void GameScreen::notifyInventoryItemEnabled(uint16 itemIndex) {
@@ -126,6 +138,16 @@ void GameScreen::notifyInventoryItemEnabled(uint16 itemIndex) {
 
 void GameScreen::notifyDiaryEntryEnabled() {
 	_topMenu->notifyDiaryEntryEnabled();
+}
+
+void GameScreen::pauseGame(bool pause) {
+	if (StarkGlobal->getLevel()) {
+		StarkGlobal->getLevel()->onEnginePause(pause);
+	}
+	if (StarkGlobal->getCurrent()) {
+		StarkGlobal->getCurrent()->getLevel()->onEnginePause(pause);
+		StarkGlobal->getCurrent()->getLocation()->onEnginePause(pause);
+	}
 }
 
 } // End of namespace Stark

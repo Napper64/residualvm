@@ -117,10 +117,14 @@ public:
 	Common::Platform getPlatform() const;
 	Common::Language getGameLanguage() const;
 	uint32 getGameLocalizationType() const;
+	bool isTextLanguageEnglish() const;
 	bool isWideScreenModEnabled() const;
 
+	bool canSaveGameStateCurrently() override;
 	bool canLoadGameStateCurrently() override;
+	void tryAutoSaving();
 	Common::Error loadGameState(int slot) override;
+	Common::Error saveGameState(int slot, const Common::String &desc) override;
 	Common::Error loadGameState(Common::String fileName, TransitionType transition);
 
 	const DirectorySubEntry *getFileDescription(const Common::String &room, uint32 index, uint16 face,
@@ -219,7 +223,10 @@ private:
 
 	bool _interactive;
 
+	uint32 _lastSaveTime;
+
 	uint32 _backgroundSoundScriptLastRoomId;
+	uint32 _backgroundSoundScriptLastAgeId;
 
 	/**
 	 * When the widescreen mode is active, the user can manually hide

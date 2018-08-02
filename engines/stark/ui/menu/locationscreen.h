@@ -51,6 +51,7 @@ public:
 	// Screen API
 	void open() override;
 	void close() override;
+	void onScreenChanged() override;
 
 protected:
 	// Window API
@@ -75,12 +76,32 @@ typedef Common::Functor2<StaticLocationWidget &, const Common::Point &, void> Wi
 
 /**
  * User interface widget bound to a Location RenderEntry
+ * 
+ * Also used without bounding the RenderEntry, as a base class
  */
 class StaticLocationWidget {
 public:
 	StaticLocationWidget(const char *renderEntryName, WidgetOnClickCallback *onClickCallback,
 	                     WidgetOnMouseMoveCallback *onMouseMoveCallback);
-	~StaticLocationWidget();
+	virtual ~StaticLocationWidget();
+
+	/** Draw the widget */
+	virtual void render();
+
+	/** Is the specified point inside the widget? */
+	virtual bool isMouseInside(const Common::Point &mousePos) const;
+
+	/** Called when the widget is clicked */
+	virtual void onClick();
+
+	/** Called when the mouse hovers the widget */
+	virtual void onMouseMove(const Common::Point &mousePos);
+
+	/** Called when the mouse's left button just gets up */
+	virtual void onMouseUp() {}
+
+	/** Called when the screen's resolution is changed */
+	virtual void onScreenChanged();
 
 	/** Lookup sounds in the static location for use when hovering / clicking the widget */
 	void setupSounds(int16 enterSound, int16 clickSound);
@@ -92,18 +113,9 @@ public:
 	 */
 	void setTextColor(uint32 textColor);
 
-	/** For widget with no text visual, this function does nothing */
-	void resetTextTexture();
-
-	/** Draw the widget */
-	void render();
-
 	/** Widgets must be visible to be rendered and interactive */
 	bool isVisible() const;
 	void setVisible(bool visible);
-
-	/** Is the specified point inside the widget? */
-	bool isMouseInside(const Common::Point &mousePos) const;
 
 	/** Per frame widget state update callback */
 	void onGameLoop();
@@ -114,14 +126,11 @@ public:
 	/** Called when the mouse leaves the widget */
 	void onMouseLeave();
 
-	/** Called when the mouse hovers the widget */
-	void onMouseMove(const Common::Point &mousePos);
-
-	/** Called when the widget is clicked */
-	void onClick();
+protected:
+	Common::Point getPosition() const;
+	Gfx::RenderEntry *_renderEntry;
 
 private:
-	Gfx::RenderEntry *_renderEntry;
 	Resources::ItemVisual *_item;
 	bool _visible;
 

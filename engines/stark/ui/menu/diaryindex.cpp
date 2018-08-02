@@ -26,6 +26,8 @@
 #include "engines/stark/services/services.h"
 #include "engines/stark/services/diary.h"
 #include "engines/stark/services/userinterface.h"
+#include "engines/stark/services/gamemessage.h"
+
 #include "engines/stark/ui/cursor.h"
 
 #include "common/translation.h"
@@ -62,22 +64,22 @@ void DiaryIndexScreen::open() {
 
 	_widgets.push_back(new StaticLocationWidget(
 			"Options",
-			nullptr,
+			CLICK_HANDLER(DiaryIndexScreen, settingsHandler),
 			MOVE_HANDLER(DiaryIndexScreen, widgetTextColorHandler)));
 
 	_widgets.push_back(new StaticLocationWidget(
 			"Log",
-			nullptr,
+			CLICK_HANDLER(DiaryIndexScreen, dialogHandler),
 			MOVE_HANDLER(DiaryIndexScreen, widgetTextColorHandler)));
 
 	_widgets.push_back(new StaticLocationWidget(
 			"Fmv",
-			nullptr,
+			CLICK_HANDLER(DiaryIndexScreen, fmvHandler),
 			MOVE_HANDLER(DiaryIndexScreen, widgetTextColorHandler)));
 
 	_widgets.push_back(new StaticLocationWidget(
 			"Diary",
-			nullptr,
+			CLICK_HANDLER(DiaryIndexScreen, diaryHandler),
 			MOVE_HANDLER(DiaryIndexScreen, widgetTextColorHandler)));
 	_widgets.back()->setVisible(StarkDiary->isEnabled());
 
@@ -94,18 +96,11 @@ void DiaryIndexScreen::open() {
 	_widgets.push_back(new StaticLocationWidget(
 			"Back",
 			CLICK_HANDLER(DiaryIndexScreen, backHandler),
-			MOVE_HANDLER(DiaryIndexScreen, widgetTextColorHandler)));
+			nullptr));
 
 	for (uint i = 1; i < _widgets.size(); i++) {
 		// The background image is intentionally ignored
 		_widgets[i]->setupSounds(0, 1);
-	}
-}
-
-void DiaryIndexScreen::onScreenChanged() {
-	for (uint i = 1; i < _widgets.size(); i++) {
-		// The background image is intentionally ignored
-		_widgets[i]->resetTextTexture();
 	}
 }
 
@@ -116,54 +111,38 @@ void DiaryIndexScreen::widgetTextColorHandler(StaticLocationWidget &widget, cons
 	}
 }
 
+void DiaryIndexScreen::settingsHandler() {
+	StarkUserInterface->changeScreen(Screen::kScreenSettingsMenu);
+}
+
+void DiaryIndexScreen::fmvHandler() {
+	StarkUserInterface->changeScreen(Screen::kScreenFMVMenu);
+}
+
 void DiaryIndexScreen::backHandler() {
-	StarkUserInterface->changeScreen(Screen::kScreenGame);
+	StarkUserInterface->backPrevScreen();
 }
 
 void DiaryIndexScreen::quitHandler() {
-	StarkUserInterface->notifyShouldExit();
+	if (StarkUserInterface->confirm(GameMessage::kQuitGamePrompt)) {
+		StarkUserInterface->requestQuitToMainMenu();
+	}
 }
 
 void DiaryIndexScreen::loadHandler() {
-	// TODO: Implement the original load screen
-
-	GUI::SaveLoadChooser slc(_("Load game:"), _("Load"), false);
-
-	g_engine->pauseEngine(true);
-	int slot = slc.runModalWithCurrentTarget();
-	g_engine->pauseEngine(false);
-
-	if (slot >= 0) {
-		StarkUserInterface->changeScreen(Screen::kScreenGame);
-
-		Common::Error loadError = g_engine->loadGameState(slot);
-
-		if (loadError.getCode() != Common::kNoError) {
-			GUI::MessageDialog dialog(loadError.getDesc());
-			dialog.runModal();
-		}
-	}
+	StarkUserInterface->changeScreen(Screen::kScreenLoadMenu);
 }
 
 void DiaryIndexScreen::saveHandler() {
-	// TODO: Implement the original save screen
+	StarkUserInterface->changeScreen(Screen::kScreenSaveMenu);
+}
 
-	GUI::SaveLoadChooser slc(_("Save game:"), _("Save"), true);
+void DiaryIndexScreen::diaryHandler() {
+	StarkUserInterface->changeScreen(Screen::kScreenDiaryPages);
+}
 
-	g_engine->pauseEngine(true);
-	int slot = slc.runModalWithCurrentTarget();
-	g_engine->pauseEngine(false);
-
-	if (slot >= 0) {
-		Common::Error loadError = g_engine->saveGameState(slot, slc.getResultString());
-
-		if (loadError.getCode() != Common::kNoError) {
-			GUI::MessageDialog dialog(loadError.getDesc());
-			dialog.runModal();
-		}
-
-		StarkUserInterface->changeScreen(Screen::kScreenGame);
-	}
+void DiaryIndexScreen::dialogHandler() {
+	StarkUserInterface->changeScreen(Screen::kScreenDialog);
 }
 
 } // End of namespace Stark

@@ -30,6 +30,7 @@
 #include "engines/stark/resources/knowledgeset.h"
 #include "engines/stark/resources/item.h"
 #include "engines/stark/resources/location.h"
+#include "engines/stark/resources/layer.h"
 
 #include "engines/stark/services/global.h"
 #include "engines/stark/services/services.h"
@@ -41,18 +42,29 @@
 #include "engines/stark/ui/world/actionmenu.h"
 #include "engines/stark/ui/world/inventorywindow.h"
 
+#include "engines/stark/visual/text.h"
+#include "engines/stark/visual/image.h"
+
 namespace Stark {
 
 GameWindow::GameWindow(Gfx::Driver *gfx, Cursor *cursor, ActionMenu *actionMenu, InventoryWindow *inventory) :
 		Window(gfx, cursor),
 	_actionMenu(actionMenu),
 	_inventory(inventory),
-	_objectUnderCursor(nullptr) {
+	_objectUnderCursor(nullptr),
+	_displayExit(false) {
 	_position = Common::Rect(Gfx::Driver::kGameViewportWidth, Gfx::Driver::kGameViewportHeight);
 	_position.translate(0, Gfx::Driver::kTopBorderHeight);
 	_visible = true;
 
 	_fadeRenderer = _gfx->createFadeRenderer();
+
+	_exitArrow = StarkStaticProvider->getUIElement(StaticProvider::kExitArrow);
+	_exitArrowLeft = StarkStaticProvider->getUIElement(StaticProvider::kExitArrowLeft);
+	_exitArrowRight = StarkStaticProvider->getUIElement(StaticProvider::kExitArrowRight);
+
+	_exitLeftBoundary = 5;
+	_exitRightBoundary = Gfx::Driver::kGameViewportWidth - _exitArrowRight->getWidth() - 5;
 }
 
 GameWindow::~GameWindow() {
@@ -73,6 +85,27 @@ void GameWindow::onRender() {
 
 		// Go for the next one
 		element++;
+	}
+
+	if (_displayExit) {
+		Common::Array<Common::Point> exitPositions = StarkGameInterface->listExitPositions();
+
+		for (uint i = 0; i < exitPositions.size(); ++i) {
+			Common::Point pos = exitPositions[i];
+			VisualImageXMG *exitImage = nullptr;
+
+			if (pos.x < _exitLeftBoundary) {
+				pos.x = _exitLeftBoundary;
+				exitImage = _exitArrowLeft;
+			} else if (pos.x > _exitRightBoundary) {
+				pos.x = _exitRightBoundary;
+				exitImage = _exitArrowRight;
+			} else {
+				exitImage = _exitArrow;
+			}
+
+			exitImage->render(pos, false);
+		}
 	}
 
 	float fadeLevel = StarkScene->getFadeLevel();
@@ -133,6 +166,10 @@ void GameWindow::onMouseMove(const Common::Point &pos) {
 }
 
 void GameWindow::onClick(const Common::Point &pos) {
+	if (!StarkGlobal->getCurrent()) {
+		return; // No level is loaded yet, interaction is impossible
+	}
+
 	if (!StarkUserInterface->isInteractive()) {
 		StarkUserInterface->markInteractionDenied();
 		return;
@@ -148,7 +185,7 @@ void GameWindow::onClick(const Common::Point &pos) {
 
 	if (_objectUnderCursor) {
 		if (singlePossibleAction != -1) {
-                        StarkGameInterface->itemDoActionAt(_objectUnderCursor, singlePossibleAction, _objectRelativePosition);
+			StarkGameInterface->itemDoActionAt(_objectUnderCursor, singlePossibleAction, _objectRelativePosition);
 		} else if (selectedInventoryItem == -1) {
 			_actionMenu->open(_objectUnderCursor, _objectRelativePosition);
 		}
@@ -232,6 +269,25 @@ void GameWindow::reset() {
 	_objectUnderCursor = nullptr;
 	_objectRelativePosition.x = 0;
 	_objectRelativePosition.y = 0;
+}
+
+void GameWindow::onScreenChanged() {
+	// May be called when resources have not been loaded
+	if (!StarkGlobal->getCurrent()) {
+		return;
+	}
+
+	Common::Array<Resources::Layer *> layers = StarkGlobal->getCurrent()->getLocation()->listLayers();
+
+	for (uint i = 0; i < layers.size(); ++i) {
+		Gfx::RenderEntryArray renderEntries = layers[i]->listRenderEntries();
+		for (uint j = 0; j < renderEntries.size(); ++j) {
+			VisualText *text = renderEntries[j]->getText();
+			if (text) {
+				text->resetTexture();
+			}
+		}
+	}
 }
 
 } // End of namespace Stark

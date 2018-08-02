@@ -151,11 +151,15 @@ int16 ButtonsDialog::update() {
 				}
 			}
 		} else if (event.type == Common::EVENT_LBUTTONDOWN) {
-			return _frameToDisplay;
+			if (_frameToDisplay > 0) {
+				return _frameToDisplay;
+			} else {
+				_vm->_sound->playEffect(697, 5);
+			}
 		} else if (event.type == Common::EVENT_KEYDOWN) {
 			switch (event.kbd.keycode) {
 			case Common::KEYCODE_ESCAPE:
-				return -1;
+				return _buttonCount;
 			default:
 				break;
 			}
@@ -295,19 +299,25 @@ void Menu::updateMainMenu(uint16 action) {
 	}
 }
 
+Graphics::Surface *Menu::captureThumbnail() {
+	Graphics::Surface *big = _vm->_gfx->getScreenshot();
+	Graphics::Surface *thumbnail = createThumbnail(big);
+	big->free();
+	delete big;
+
+	return thumbnail;
+}
+
 void Menu::goToNode(uint16 node) {
-	if (_vm->_state->getMenuSavedAge() == 0 && _vm->_state->getLocationRoom() != 901) {
+	if (_vm->_state->getMenuSavedAge() == 0 && _vm->_state->getLocationRoom() != kRoomMenu) {
 		// Entering menu, save current location ...
 		_vm->_state->setMenuSavedAge(_vm->_state->getLocationAge());
 		_vm->_state->setMenuSavedRoom(_vm->_state->getLocationRoom());
 		_vm->_state->setMenuSavedNode(_vm->_state->getLocationNode());
 
 		// ... and capture the screen
-		Graphics::Surface *big = _vm->_gfx->getScreenshot();
-		Graphics::Surface *thumb = createThumbnail(big);
-		_vm->_state->setSaveThumbnail(thumb);
-		big->free();
-		delete big;
+		Graphics::Surface *thumbnail = captureThumbnail();
+		_saveThumbnail.reset(thumbnail);
 
 		// Reset some sound variables
 		if (_vm->_state->getLocationAge() == 6 && _vm->_state->getSoundEdannaUnk587() == 1 && _vm->_state->getSoundEdannaUnk1031()) {
@@ -330,7 +340,7 @@ void Menu::goToNode(uint16 node) {
 	}
 
 	_vm->_state->setLocationNextAge(9);
-	_vm->_state->setLocationNextRoom(901);
+	_vm->_state->setLocationNextRoom(kRoomMenu);
 	_vm->goToNode(node, kTransitionNone);
 }
 
@@ -386,7 +396,7 @@ uint16 Menu::dialogSaveValue() {
 Common::String Menu::getAgeLabel(GameState *gameState) {
 	uint32 age = 0;
 	uint32 room = gameState->getLocationRoom();
-	if (room == 901)
+	if (room == kRoomMenu)
 		age = gameState->getMenuSavedAge();
 	else
 		age = gameState->getLocationAge();
@@ -432,6 +442,18 @@ void Menu::setSaveLoadSpotItem(uint16 id, SpotItemFace *spotItem) {
 	if (id == 1) {
 		_saveLoadSpotItem = spotItem;
 	}
+}
+
+bool Menu::isOpen() const {
+	return _vm->_state->getLocationAge() == 9 && _vm->_state->getLocationRoom() == kRoomMenu;
+}
+
+void Menu::generateSaveThumbnail() {
+	_saveThumbnail.reset(captureThumbnail());
+}
+
+Graphics::Surface *Menu::borrowSaveThumbnail() {
+	return _saveThumbnail.get();
 }
 
 PagingMenu::PagingMenu(Myst3Engine *vm) :
@@ -533,17 +555,20 @@ void PagingMenu::loadMenuSelect(uint16 item) {
 	}
 
 	// Extract the age to load from the savegame
-	GameState *gameState = new GameState(_vm->getPlatform(), _vm->_db);
-	gameState->load(saveFile);
+	GameState gameState = GameState(_vm->getPlatform(), _vm->_db);
+	gameState.load(saveFile);
 
 	// Update the age name
-	_saveLoadAgeName = getAgeLabel(gameState);
+	_saveLoadAgeName = getAgeLabel(&gameState);
 
 	// Update the save thumbnail
-	if (_saveLoadSpotItem)
-		_saveLoadSpotItem->updateData(gameState->getSaveThumbnail());
+	if (_saveLoadSpotItem) {
+		Graphics::Surface *thumbnail = GameState::readThumbnail(saveFile);
+		_saveLoadSpotItem->updateData(thumbnail);
+		thumbnail->free();
+		delete thumbnail;
+	}
 
-	delete gameState;
 	delete saveFile;
 }
 
@@ -567,9 +592,8 @@ void PagingMenu::saveMenuOpen() {
 	saveLoadUpdateVars();
 
 	// Update the thumbnail to display
-	Graphics::Surface *saveThumb = _vm->_state->getSaveThumbnail();
-	if (_saveLoadSpotItem && saveThumb)
-		_saveLoadSpotItem->updateData(saveThumb);
+	if (_saveLoadSpotItem && _saveThumbnail)
+		_saveLoadSpotItem->updateData(_saveThumbnail.get());
 }
 
 void PagingMenu::saveMenuSelect(uint16 item) {
@@ -595,7 +619,7 @@ void PagingMenu::saveMenuSave() {
 		return;
 
 	Common::String fileName = _saveName;
-	if (!fileName.hasSuffix(".M3S") && !fileName.hasSuffix(".m3s"))
+	if (!fileName.hasSuffixIgnoreCase(".M3S"))
 		fileName += ".M3S";
 
 	// Check if file exists
@@ -613,8 +637,7 @@ void PagingMenu::saveMenuSave() {
 
 	// Save the state and the thumbnail
 	Common::OutSaveFile *save = _vm->getSaveFileManager()->openForSaving(fileName);
-	_vm->_state->setSaveDescription(_saveName);
-	_vm->_state->save(save);
+	_vm->_state->save(save, _saveName, _saveThumbnail.get());
 	delete save;
 
 	// Do next action
@@ -658,7 +681,7 @@ void PagingMenu::draw() {
 	uint16 room = _vm->_state->getLocationRoom();
 	uint16 age = _vm->_state->getLocationAge();
 
-	if (room != 901 || !(node == 200 || node == 300))
+	if (room != kRoomMenu || !(node == 200 || node == 300))
 		return;
 
 	int16 page = _vm->_state->getMenuSaveLoadCurrentPage();
@@ -708,7 +731,7 @@ bool PagingMenu::handleInput(const Common::KeyState &e) {
 	uint16 room = _vm->_state->getLocationRoom();
 	uint16 item = _vm->_state->getMenuSaveLoadSelectedItem();
 
-	if (room != 901 || node != 300 || item != 7)
+	if (room != kRoomMenu || node != 300 || item != 7)
 		return false;
 
 	Common::String display = prepareSaveNameForDisplay(_saveName);
@@ -746,7 +769,7 @@ void PagingMenu::loadMenuChangePage() {
 Common::String PagingMenu::prepareSaveNameForDisplay(const Common::String &name) {
 	Common::String display = name;
 	display.toUppercase();
-	if (display.hasSuffix(".M3S")) {
+	if (display.hasSuffixIgnoreCase(".M3S")) {
 		display.deleteLastChar();
 		display.deleteLastChar();
 		display.deleteLastChar();
@@ -771,7 +794,7 @@ void AlbumMenu::draw() {
 	uint16 room = _vm->_state->getLocationRoom();
 
 	// Load and save menus only
-	if (room != 901 || !(node == 200 || node == 300))
+	if (room != kRoomMenu || !(node == 200 || node == 300))
 		return;
 
 	if (!_saveLoadAgeName.empty()) {
@@ -854,9 +877,10 @@ void AlbumMenu::loadSaves() {
 
 		if (_albumSpotItems.contains(i)) {
 			// Read and resize the thumbnail
-			Graphics::Surface *miniThumb = new Graphics::Surface();
-			miniThumb->create(kAlbumThumbnailWidth, kAlbumThumbnailHeight, Texture::getRGBAPixelFormat());
-			data.resizeThumbnail(miniThumb);
+			Graphics::Surface *saveThumb = GameState::readThumbnail(saveFile);
+			Graphics::Surface *miniThumb = GameState::resizeThumbnail(saveThumb, kAlbumThumbnailWidth, kAlbumThumbnailHeight);
+			saveThumb->free();
+			delete saveThumb;
 
 			SpotItemFace *spotItem = _albumSpotItems.getVal(i);
 			spotItem->updateData(miniThumb);
@@ -879,7 +903,7 @@ void AlbumMenu::loadMenuSelect() {
 	uint16 room = _vm->_state->getLocationRoom();
 
 	// Details are only updated on the load menu
-	if (room != 901 || node != 200)
+	if (room != kRoomMenu || node != 200)
 		return;
 
 	int32 selectedSave = _vm->_state->getMenuSelectedSave();
@@ -909,8 +933,12 @@ void AlbumMenu::loadMenuSelect() {
 	_saveLoadTime = gameState->formatSaveTime();
 
 	// Update the save thumbnail
-	if (_saveLoadSpotItem)
-		_saveLoadSpotItem->updateData(gameState->getSaveThumbnail());
+	if (_saveLoadSpotItem) {
+		Graphics::Surface *thumbnail = GameState::readThumbnail(saveFile);
+		_saveLoadSpotItem->updateData(thumbnail);
+		thumbnail->free();
+		delete thumbnail;
+	}
 
 	delete gameState;
 }
@@ -933,9 +961,8 @@ void AlbumMenu::saveMenuOpen() {
 	_saveLoadTime = "";
 
 	// Update the thumbnail to display
-	Graphics::Surface *saveThumb = _vm->_state->getSaveThumbnail();
-	if (_saveLoadSpotItem && saveThumb)
-		_saveLoadSpotItem->updateData(saveThumb);
+	if (_saveLoadSpotItem && _saveThumbnail)
+		_saveLoadSpotItem->updateData(_saveThumbnail.get());
 }
 
 void AlbumMenu::saveMenuSave() {
@@ -952,8 +979,7 @@ void AlbumMenu::saveMenuSave() {
 
 	// Save the state and the thumbnail
 	Common::OutSaveFile *save = _vm->getSaveFileManager()->openForSaving(fileName);
-	_vm->_state->setSaveDescription(saveName);
-	_vm->_state->save(save);
+	_vm->_state->save(save, saveName, _saveThumbnail.get());
 	delete save;
 
 	// Do next action

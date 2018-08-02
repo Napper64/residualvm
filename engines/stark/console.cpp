@@ -29,6 +29,8 @@
 #include "engines/stark/resources/knowledge.h"
 #include "engines/stark/resources/root.h"
 #include "engines/stark/resources/script.h"
+#include "engines/stark/resources/knowledgeset.h"
+#include "engines/stark/resources/item.h"
 #include "engines/stark/services/archiveloader.h"
 #include "engines/stark/services/dialogplayer.h"
 #include "engines/stark/services/global.h"
@@ -37,6 +39,7 @@
 #include "engines/stark/services/staticprovider.h"
 #include "engines/stark/tools/decompiler.h"
 
+#include <limits.h>
 #include "common/file.h"
 
 namespace Stark {
@@ -57,14 +60,13 @@ Console::Console() :
 	registerCmd("forceScript",          WRAP_METHOD(Console, Cmd_ForceScript));
 	registerCmd("decompileScript",      WRAP_METHOD(Console, Cmd_DecompileScript));
 	registerCmd("testDecompiler",       WRAP_METHOD(Console, Cmd_TestDecompiler));
-	registerCmd("listInventory",        WRAP_METHOD(Console, Cmd_ListInventory));
+	registerCmd("listInventoryItems",   WRAP_METHOD(Console, Cmd_ListInventoryItems));
 	registerCmd("listLocations",        WRAP_METHOD(Console, Cmd_ListLocations));
 	registerCmd("location",             WRAP_METHOD(Console, Cmd_Location));
 	registerCmd("chapter",              WRAP_METHOD(Console, Cmd_Chapter));
 	registerCmd("changeLocation",       WRAP_METHOD(Console, Cmd_ChangeLocation));
 	registerCmd("changeChapter",        WRAP_METHOD(Console, Cmd_ChangeChapter));
 	registerCmd("changeKnowledge",      WRAP_METHOD(Console, Cmd_ChangeKnowledge));
-	registerCmd("selectDialogOption",   WRAP_METHOD(Console, Cmd_SelectDialogOption));
 	registerCmd("enableInventoryItem",  WRAP_METHOD(Console, Cmd_EnableInventoryItem));
 }
 
@@ -73,10 +75,10 @@ Console::~Console() {
 
 bool Console::Cmd_DumpArchive(int argc, const char **argv) {
 	if (argc != 2) {
-		debugPrintf("Extract all the files from a game archive.\n");
-		debugPrintf("The destination folder, named 'dump', must exist.\n");
+		debugPrintf("Extract all the files from a game archive\n");
+		debugPrintf("The destination folder, named 'dump', must exist in location ResidualVM was launched from\n");
 		debugPrintf("Usage :\n");
-		debugPrintf("dumpArchive [archive name]\n");
+		debugPrintf("dumpArchive [path to archive]\n");
 		return true;
 	}
 
@@ -117,32 +119,55 @@ bool Console::Cmd_DumpArchive(int argc, const char **argv) {
 }
 
 bool Console::Cmd_DumpRoot(int argc, const char **argv) {
-	StarkGlobal->getRoot()->print();
+	Resources::Root *root = StarkGlobal->getRoot();
+	if (root) {
+		root->print();
+	} else {
+		debugPrintf("The global root has not been loaded\n");
+	}
 
 	return true;
 }
 
 bool Console::Cmd_DumpGlobal(int argc, const char **argv) {
-	StarkGlobal->getLevel()->print();
+	Resources::Level *level = StarkGlobal->getLevel();
+	if (level) {
+		level->print();
+	} else {
+		debugPrintf("The global level has not been loaded\n");
+	}
 
 	return true;
 }
 
 bool Console::Cmd_DumpStatic(int argc, const char **argv) {
+	// Static resources are initialized in the beginning of the running
 	StarkStaticProvider->getLevel()->print();
 
 	return true;
 }
 
 bool Console::Cmd_DumpLevel(int argc, const char **argv) {
-	StarkGlobal->getCurrent()->getLevel()->print();
+	Current *current = StarkGlobal->getCurrent();
+	if (current) {
+		current->getLevel()->print();
+	} else {
+		debugPrintf("Game levels have not been loaded\n");
+	}
 
 	return true;
 }
 
 bool Console::Cmd_DumpKnowledge(int argc, const char **argv) {
-	Resources::Level *level = StarkGlobal->getCurrent()->getLevel();
-	Resources::Location *location = StarkGlobal->getCurrent()->getLocation();
+	Current *current = StarkGlobal->getCurrent();
+
+	if (!current) {
+		debugPrintf("Game levels have not been loaded\n");
+		return true;
+	}
+
+	Resources::Level *level = current->getLevel();
+	Resources::Location *location = current->getLocation();
 	Common::Array<Resources::Knowledge *> knowledge = level->listChildrenRecursive<Resources::Knowledge>();
 	knowledge.insert_at(knowledge.size(), location->listChildrenRecursive<Resources::Knowledge>());
 	Common::Array<Resources::Knowledge *>::iterator it;
@@ -153,6 +178,13 @@ bool Console::Cmd_DumpKnowledge(int argc, const char **argv) {
 }
 
 bool Console::Cmd_ChangeKnowledge(int argc, const char **argv) {
+	Current *current = StarkGlobal->getCurrent();
+
+	if (!current) {
+		debugPrintf("Game levels have not been loaded\n");
+		return true;
+	}
+
 	uint index = 0;
 	char type = 0;
 
@@ -160,8 +192,8 @@ bool Console::Cmd_ChangeKnowledge(int argc, const char **argv) {
 		index = atoi(argv[1]);
 		type = argv[2][0];
 		if (type == 'b' || type == 'i') {
-			Resources::Level *level = StarkGlobal->getCurrent()->getLevel();
-			Resources::Location *location = StarkGlobal->getCurrent()->getLocation();
+			Resources::Level *level = current->getLevel();
+			Resources::Location *location = current->getLocation();
 			Common::Array<Resources::Knowledge *> knowledgeArr = level->listChildrenRecursive<Resources::Knowledge>();
 			knowledgeArr.insert_at(knowledgeArr.size(), location->listChildrenRecursive<Resources::Knowledge>());
 			if (index < knowledgeArr.size() ) {
@@ -201,6 +233,12 @@ Common::Array<Resources::Script *> Console::listAllLocationScripts() const {
 }
 
 bool Console::Cmd_ListScripts(int argc, const char **argv) {
+	Current *current = StarkGlobal->getCurrent();
+	if (!current) {
+		debugPrintf("Game levels have not been loaded\n");
+		return true;
+	}
+
 	Common::Array<Resources::Script *> scripts = listAllLocationScripts();
 
 	for (uint i = 0; i < scripts.size(); i++) {
@@ -225,6 +263,12 @@ bool Console::Cmd_ListScripts(int argc, const char **argv) {
 }
 
 bool Console::Cmd_EnableScript(int argc, const char **argv) {
+	Current *current = StarkGlobal->getCurrent();
+	if (!current) {
+		debugPrintf("Game levels have not been loaded\n");
+		return true;
+	}
+
 	uint index = 0;
 
 	if (argc >= 2) {
@@ -254,6 +298,12 @@ bool Console::Cmd_EnableScript(int argc, const char **argv) {
 }
 
 bool Console::Cmd_ForceScript(int argc, const char **argv) {
+	Current *current = StarkGlobal->getCurrent();
+	if (!current) {
+		debugPrintf("Game levels have not been loaded\n");
+		return true;
+	}
+
 	uint index = 0;
 
 	if (argc >= 2) {
@@ -280,6 +330,12 @@ bool Console::Cmd_ForceScript(int argc, const char **argv) {
 }
 
 bool Console::Cmd_DecompileScript(int argc, const char **argv) {
+	Current *current = StarkGlobal->getCurrent();
+	if (!current) {
+		debugPrintf("Game levels have not been loaded\n");
+		return true;
+	}
+
 	if (argc >= 2) {
 		uint index = atoi(argv[1]);
 
@@ -401,27 +457,59 @@ void Console::decompileScriptChildren(Resources::Object *level) {
 bool Console::Cmd_DumpLocation(int argc, const char **argv) {
 	if (StarkStaticProvider->isStaticLocation()) {
 		StarkStaticProvider->getLocation()->print();
+		return true;
+	}
+
+	Current *current = StarkGlobal->getCurrent();
+	if (current) {
+		current->getLocation()->print();
 	} else {
-		StarkGlobal->getCurrent()->getLocation()->print();
+		debugPrintf("Locations have not been loaded\n");
 	}
 
 	return true;
 }
 
-bool Console::Cmd_ListInventory(int argc, const char **argv) {
-	StarkGlobal->printInventory(argc != 2);
+bool Console::Cmd_ListInventoryItems(int argc, const char **argv) {
+	Resources::KnowledgeSet *inventory = StarkGlobal->getInventory();
+
+	if (!inventory) {
+		debugPrintf("The inventory has not been loaded\n");
+		return true;
+	}
+
+	Common::Array<Resources::Item*> inventoryItems = inventory->listChildren<Resources::Item>(Resources::Item::kItemInventory);
+	Common::Array<Resources::Item*>::iterator it = inventoryItems.begin();
+	for (int i = 0; it != inventoryItems.end(); ++it, i++) {
+		debugPrintf("Item %d: %s%s\n", i, (*it)->getName().c_str(), (*it)->isEnabled() ? " (enabled)" : "");
+	}
 
 	return true;
 }
 
 bool Console::Cmd_EnableInventoryItem(int argc, const char **argv) {
-	if (argc != 2) {
-		debugPrintf("Enable a specific inventory item.\n");
-		debugPrintf("Usage :\n");
-		debugPrintf("changeLocation [level] [location]\n");
+	Resources::KnowledgeSet *inventory = StarkGlobal->getInventory();
+
+	if (!inventory) {
+		debugPrintf("The inventory has not been loaded\n");
 		return true;
 	}
-	StarkGlobal->enableInventoryItem(atoi(argv[1]));
+
+	if (argc != 2) {
+		debugPrintf("Enable a specific inventory item. Use listInventoryItems to get an id\n");
+		debugPrintf("Usage :\n");
+		debugPrintf("enableInventoryItem [id]\n");
+		return true;
+	}
+
+	uint num = atoi(argv[1]);
+	Common::Array<Resources::Item*> inventoryItems = inventory->listChildren<Resources::Item>(Resources::Item::kItemInventory);
+	if (num < inventoryItems.size()) {
+		inventoryItems[num]->setEnabled(true);
+	} else {
+		debugPrintf("Invalid index %d, only %d indices available\n", num, inventoryItems.size());
+	}
+
 	return true;
 }
 
@@ -472,10 +560,22 @@ bool Console::Cmd_ListLocations(int argc, const char **argv) {
 }
 
 bool Console::Cmd_ChangeLocation(int argc, const char **argv) {
+	if (!StarkGlobal->getRoot()) {
+		debugPrintf("The global root has not been loaded\n");
+		return true;
+	}
+
 	if (argc != 3) {
-		debugPrintf("Change the current location.\n");
+		debugPrintf("Change the current location. Use listLocations to get indices\n");
 		debugPrintf("Usage :\n");
 		debugPrintf("changeLocation [level] [location]\n");
+		return true;
+	}
+
+	// Assert indices
+	Common::String xarcFileName = Common::String::format("%s/%s/%s.xarc", argv[1], argv[2], argv[2]);
+	if (!Common::File::exists(xarcFileName)) {
+		debugPrintf("Invalid location %s %s. Use listLocations to get correct indices\n", argv[1], argv[2]);
 		return true;
 	}
 
@@ -488,41 +588,41 @@ bool Console::Cmd_ChangeLocation(int argc, const char **argv) {
 }
 
 bool Console::Cmd_ChangeChapter(int argc, const char **argv) {
+	if (!StarkGlobal->getLevel()) {
+		debugPrintf("The global level has not been loaded\n");
+		return true;
+	}
+
 	if (argc != 2) {
-		debugPrintf("Change the current chapter.\n");
+		debugPrintf("Change the current chapter\n");
 		debugPrintf("Usage :\n");
 		debugPrintf("changeChapter [value]\n");
 		return true;
 	}
 
-	uint32 value = atoi(argv[1]);
-
-	StarkGlobal->setCurrentChapter(value);
+	long value = strtol(argv[1], 0, 10);
+	if (value >= 0 && value <= INT_MAX)
+		StarkGlobal->setCurrentChapter((int32) value);
+	else
+		debugPrintf("Invalid chapter\n");
 
 	return true;
 }
 
-bool Console::Cmd_SelectDialogOption(int argc, const char **argv) {
-	if (argc != 2) {
-		debugPrintf("Select a dialog option.\n");
-		debugPrintf("Usage :\n");
-		debugPrintf("selectDialogOption [option]\n");
+bool Console::Cmd_Location(int argc, const char **argv) {
+	Current *current = StarkGlobal->getCurrent();
+
+	if (!current) {
+		debugPrintf("Game levels have not been loaded\n");
 		return true;
 	}
-	StarkDialogPlayer->selectOption(atoi(argv[1]));
 
-	return false;
-}
-
-bool Console::Cmd_Location(int argc, const char **argv) {
 	if (argc != 1) {
-		debugPrintf("Display the current location.\n");
+		debugPrintf("Display the current location\n");
 		debugPrintf("Usage :\n");
 		debugPrintf("location\n");
 		return true;
 	}
-
-	Current *current = StarkGlobal->getCurrent();
 
 	debugPrintf("location: %02x %02x\n", current->getLevel()->getIndex(), current->getLocation()->getIndex());
 
@@ -530,8 +630,13 @@ bool Console::Cmd_Location(int argc, const char **argv) {
 }
 
 bool Console::Cmd_Chapter(int argc, const char **argv) {
+	if (!StarkGlobal->getLevel()) {
+		debugPrintf("The global level has not been loaded\n");
+		return true;
+	}
+
 	if (argc != 1) {
-		debugPrintf("Display the current chapter.\n");
+		debugPrintf("Display the current chapter\n");
 		debugPrintf("Usage :\n");
 		debugPrintf("chapter\n");
 		return true;

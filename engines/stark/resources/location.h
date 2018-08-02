@@ -133,6 +133,18 @@ public:
 	/** Setup a up / down floating movement for the 3d items in this location */
 	void floatScene(int32 periodMs, float amplitude, float offset);
 
+	/** Get the layer with a given name, return null when not found */
+	Layer *getLayerByName(const Common::String &name);
+
+	/** Get a render entry with a given name, return null when not found */
+	Gfx::RenderEntry *getRenderEntryByName(const Common::String &name);
+
+	/** Obtain the list of all the inner layers */
+	Common::Array<Layer *> listLayers() { return _layers; }
+
+	/** List all the exit positions */
+	Common::Array<Common::Point> listExitPositions();
+
 protected:
 	void printData() override;
 

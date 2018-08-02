@@ -20,12 +20,14 @@
  *
  */
 
+#include "engines/myst3/database.h"
 #include "engines/myst3/effects.h"
 #include "engines/myst3/node.h"
 #include "engines/myst3/myst3.h"
 #include "engines/myst3/state.h"
 #include "engines/myst3/subtitles.h"
 
+#include "common/config-manager.h"
 #include "common/debug.h"
 #include "common/rect.h"
 
@@ -85,35 +87,47 @@ Face::~Face() {
 
 Node::Node(Myst3Engine *vm, uint16 id) :
 		_vm(vm),
-		_subtitles(0) {
-	for (uint i = 0; i < 6; i++)
-		_faces[i] = 0;
+		_id(id),
+		_subtitles(nullptr) {
+	for (uint i = 0; i < ARRAYSIZE(_faces); i++)
+		_faces[i] = nullptr;
+}
+
+void Node::initEffects() {
+	resetEffects();
 
 	if (_vm->_state->getWaterEffects()) {
-		Effect *effect = WaterEffect::create(vm, id);
+		Effect *effect = WaterEffect::create(_vm, _id);
 		if (effect) {
 			_effects.push_back(effect);
 			_vm->_state->setWaterEffectActive(true);
 		}
 	}
 
-	Effect *effect = MagnetEffect::create(vm, id);
+	Effect *effect = MagnetEffect::create(_vm, _id);
 	if (effect) {
 		_effects.push_back(effect);
 		_vm->_state->setMagnetEffectActive(true);
 	}
 
-	effect = LavaEffect::create(vm, id);
+	effect = LavaEffect::create(_vm, _id);
 	if (effect) {
 		_effects.push_back(effect);
 		_vm->_state->setLavaEffectActive(true);
 	}
 
-	effect = ShieldEffect::create(vm, id);
+	effect = ShieldEffect::create(_vm, _id);
 	if (effect) {
 		_effects.push_back(effect);
 		_vm->_state->setShieldEffectActive(true);
 	}
+}
+
+void Node::resetEffects() {
+	for (uint i = 0; i < _effects.size(); i++) {
+		delete _effects[i];
+	}
+	_effects.clear();
 }
 
 Node::~Node() {
@@ -122,10 +136,8 @@ Node::~Node() {
 	}
 	_spotItems.clear();
 
-	for (uint i = 0; i < _effects.size(); i++) {
-		delete _effects[i];
-	}
-	_effects.clear();
+	resetEffects();
+
 	_vm->_state->setWaterEffectActive(false);
 	_vm->_state->setMagnetEffectActive(false);
 	_vm->_state->setLavaEffectActive(false);
@@ -197,10 +209,16 @@ void Node::loadSubtitles(uint32 id) {
 }
 
 bool Node::hasSubtitlesToDraw() {
-	if (!_subtitles)
+	if (!_subtitles || _vm->_state->getSpotSubtitle() <= 0)
 		return false;
 
-	return _vm->_state->getSpotSubtitle() > 0;
+	if (!_vm->isTextLanguageEnglish() && _vm->_state->getLocationRoom() == kRoomNarayan) {
+		// The words written on the walls in Narayan are always in English.
+		// Show the subtitles regardless of the "subtitles" setting if the game language is not English.
+		return true;
+	}
+
+	return ConfMan.getBool("subtitles");
 }
 
 void Node::drawOverlay() {

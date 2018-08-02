@@ -38,14 +38,15 @@ public:
 	// StaticLocationScreen API
 	void open() override;
 
-	// Called when the screen resolution changes to reset the text textures
-	void onScreenChanged();
-
 private:
 	void widgetTextColorHandler(StaticLocationWidget &widget, const Common::Point &mousePos);
 	void backHandler();
+	void settingsHandler();
+	void fmvHandler();
 	void loadHandler();
 	void saveHandler();
+	void diaryHandler();
+	void dialogHandler();
 	void quitHandler();
 
 	static const uint32 _textColorHovered = 0xFF961E1E;

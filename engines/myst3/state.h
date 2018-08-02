@@ -53,7 +53,7 @@ public:
 
 	void newGame();
 	bool load(Common::InSaveFile *saveFile);
-	bool save(Common::OutSaveFile *saveFile);
+	bool save(Common::OutSaveFile *saveFile, const Common::String &description, const Graphics::Surface *thumbnail);
 
 	int32 getVar(uint16 var);
 	void setVar(uint16 var, int32 value);
@@ -334,10 +334,7 @@ public:
 	void markNodeAsVisited(uint16 node, uint16 room, uint32 age);
 	bool isZipDestinationAvailable(uint16 node, uint16 room, uint32 age);
 
-	Graphics::Surface *getSaveThumbnail() const;
-	void setSaveThumbnail(Graphics::Surface *thumb);
 	Common::String formatSaveTime();
-	void setSaveDescription(const Common::String &description) { _data.saveDescription = description; }
 
 	Common::Array<uint16> getInventory();
 	void updateInventory(const Common::Array<uint16> &items);
@@ -382,13 +379,14 @@ public:
 
 		Common::String saveDescription;
 
-		Common::SharedPtr<Graphics::Surface> thumbnail;
-
 		StateData();
 		void syncWithSaveGame(Common::Serializer &s);
-		void resizeThumbnail(Graphics::Surface *small) const;
 	};
 
+	static const Graphics::PixelFormat getThumbnailSavePixelFormat();
+	static Graphics::Surface *readThumbnail(Common::ReadStream *inStream);
+	static void writeThumbnail(Common::WriteStream *outStream, const Graphics::Surface *thumbnail);
+	static Graphics::Surface *resizeThumbnail(Graphics::Surface *big, uint width, uint height);
 
 	static const uint kThumbnailWidth = 240;
 	static const uint kThumbnailHeight = 135;

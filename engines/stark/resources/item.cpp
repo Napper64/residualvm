@@ -43,6 +43,7 @@
 #include "engines/stark/services/services.h"
 #include "engines/stark/services/stateprovider.h"
 #include "engines/stark/services/userinterface.h"
+#include "engines/stark/services/settings.h"
 
 namespace Stark {
 namespace Resources {
@@ -172,6 +173,10 @@ void Item::saveLoadCurrent(ResourceSerializer *serializer) {
 			_movement->start();
 		}
 	}
+}
+
+Common::Array<Common::Point> Item::listExitPositions() {
+	return Common::Array<Common::Point>();
 }
 
 ItemVisual::~ItemVisual() {
@@ -394,6 +399,25 @@ Common::String ItemVisual::getHotspotTitle(uint32 hotspotIndex) {
 	return title;
 }
 
+Common::Array<Common::Point> ItemVisual::listExitPositionsImpl() {
+	Common::Array<PATTable *> pattables = listChildrenRecursive<PATTable>();
+	
+	Common::Array<Common::Point> positions;
+	Common::Point invalidPosition(-1, -1);
+
+	for (uint i = 0; i < pattables.size(); ++i) {
+		if (pattables[i]->getDefaultAction() == PATTable::kActionExit) {
+			Common::Point hotspot = getAnim()->getHotspotPosition(i);
+			if (hotspot != invalidPosition) {
+				hotspot += _renderEntry->getPosition();
+				positions.push_back(hotspot);
+			}
+		}
+	}
+
+	return positions;
+}
+
 ItemTemplate::~ItemTemplate() {
 }
 
@@ -495,7 +519,14 @@ BonesMesh *GlobalItemTemplate::findBonesMesh() {
 	if (_meshIndex == -1) {
 		return nullptr;
 	} else {
-		return findChildWithIndex<BonesMesh>(_meshIndex);
+		BonesMesh *mesh = findChildWithIndex<BonesMesh>(_meshIndex);
+		if (mesh && !StarkSettings->getBoolSetting(Settings::kHighModel)) {
+			BonesMesh *lowMesh = findChildWithName<BonesMesh>(mesh->getName() + "_LO_RES");
+			if (lowMesh) {
+				mesh = lowMesh;
+			}
+		}
+		return mesh;
 	}
 }
 
@@ -615,7 +646,14 @@ BonesMesh *LevelItemTemplate::findBonesMesh() {
 	if (_meshIndex == -1) {
 		return _referencedItem->findBonesMesh();
 	} else {
-		return findChildWithIndex<BonesMesh>(_meshIndex);
+		BonesMesh *mesh = findChildWithIndex<BonesMesh>(_meshIndex);
+		if (mesh && !StarkSettings->getBoolSetting(Settings::kHighModel)) {
+			BonesMesh *lowMesh = findChildWithName<BonesMesh>(mesh->getName() + "_LO_RES");
+			if (lowMesh) {
+				mesh = lowMesh;
+			}
+		}
+		return mesh;
 	}
 }
 
@@ -792,6 +830,10 @@ Gfx::RenderEntry *FloorPositionedImageItem::getRenderEntry(const Common::Point &
 	return _renderEntry;
 }
 
+Common::Array<Common::Point> FloorPositionedImageItem::listExitPositions() {
+	return listExitPositionsImpl();
+}
+
 void FloorPositionedImageItem::setPosition2D(const Common::Point &position) {
 	_position = position;
 }
@@ -844,6 +886,10 @@ void ImageItem::printData() {
 
 	debug("reference: %s", _reference.describe().c_str());
 	debug("position: x %d, y %d", _position.x, _position.y);
+}
+
+Common::Array<Common::Point> ImageItem::listExitPositions() {
+	return listExitPositionsImpl();
 }
 
 ModelItem::~ModelItem() {
@@ -928,6 +974,12 @@ BonesMesh *ModelItem::findBonesMesh() {
 			bonesMesh = _referencedItem->findBonesMesh();
 		} else {
 			bonesMesh = findChildWithIndex<BonesMesh>(_meshIndex);
+			if (bonesMesh && !StarkSettings->getBoolSetting(Settings::kHighModel)) {
+				BonesMesh *lowMesh = findChildWithName<BonesMesh>(bonesMesh->getName() + "_LO_RES");
+				if (lowMesh) {
+					bonesMesh = lowMesh;
+				}
+			}
 		}
 	}
 

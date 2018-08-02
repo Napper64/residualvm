@@ -38,6 +38,7 @@ Diary::~Diary() {}
 void Diary::clear() {
 	_diaryEntries.clear();
 	_fmvEntries.clear();
+	_conversationEntries.clear();
 	_hasUnreadEntries = false;
 	_pageIndex = 0;
 }
@@ -153,7 +154,7 @@ void Diary::logSpeech(const Common::String &line, int32 characterId) {
 }
 
 bool Diary::isEnabled() const {
-	return StarkGlobal->hasInventoryItem("Diary");
+	return StarkGlobal->getInventory() && StarkGlobal->hasInventoryItem("Diary");
 }
 
 bool Diary::hasUnreadEntries() const {
@@ -168,6 +169,6 @@ Diary::ConversationLog::ConversationLog() :
 
 Diary::ConversationLogLine::ConversationLogLine() :
 		characterId(0) {
-
 }
+
 } // End of namespace Stark

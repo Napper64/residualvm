@@ -71,9 +71,11 @@ Myst3Engine::Myst3Engine(OSystem *syst, const Myst3GameDescription *version) :
 		_inputSpacePressed(false), _inputEnterPressed(false),
 		_inputEscapePressed(false), _inputTildePressed(false),
 		_inputEscapePressedNotConsumed(false),
-		_interactive(false),
+		_interactive(false), _lastSaveTime(0),
 		_menuAction(0), _projectorBackground(0),
-		_shakeEffect(0), _rotationEffect(0), _backgroundSoundScriptLastRoomId(0),
+		_shakeEffect(0), _rotationEffect(0),
+		_backgroundSoundScriptLastRoomId(0),
+		_backgroundSoundScriptLastAgeId(0),
 		_transition(0), _frameLimiter(0), _inventoryManualHide(false) {
 	DebugMan.addDebugChannel(kDebugVariable, "Variable", "Track Variable Accesses");
 	DebugMan.addDebugChannel(kDebugSaveLoad, "SaveLoad", "Track Save/Load Function");
@@ -139,6 +141,7 @@ bool Myst3Engine::hasFeature(EngineFeature f) const {
 	return
 		(f == kSupportsRTL) ||
 		(f == kSupportsLoadingDuringRuntime) ||
+		(f == kSupportsSavingDuringRuntime) ||
 		(f == kSupportsArbitraryResolutions && !softRenderer);
 }
 
@@ -190,11 +193,11 @@ Common::Error Myst3Engine::run() {
 	} else {
 		if (getPlatform() == Common::kPlatformXbox) {
 			// Play the logo videos
-			loadNode(1, 1101, 11);
+			loadNode(1, kLogo, 11);
 		}
 
 		// Game init script, loads the menu
-		loadNode(1, 101, 1);
+		loadNode(1, kRoomShared, 1);
 	}
 
 	while (!shouldQuit()) {
@@ -210,6 +213,7 @@ Common::Error Myst3Engine::run() {
 		drawFrame();
 	}
 
+	tryAutoSaving(); //Attempt to autosave before exiting
 	unloadNode();
 
 	_archiveNode->close();
@@ -332,6 +336,14 @@ void Myst3Engine::openArchives() {
 	}
 
 	addArchive("RSRC.m3r", true);
+}
+
+bool Myst3Engine::isTextLanguageEnglish() const {
+	if (getGameLocalizationType() == kLocMonolingual && getGameLanguage() == Common::EN_ANY) {
+		return true;
+	}
+
+	return getGameLocalizationType() != kLocMonolingual && ConfMan.getInt("text_language") == kEnglish;
 }
 
 void Myst3Engine::closeArchives() {
@@ -492,7 +504,7 @@ void Myst3Engine::processInput(bool interactive) {
 			case Common::KEYCODE_F5:
 				// Open main menu
 				if (_cursor->isVisible() && interactive) {
-					if (_state->getLocationRoom() != 901)
+					if (_state->getLocationRoom() != kRoomMenu)
 						_menu->goToNode(100);
 				}
 				break;
@@ -538,6 +550,10 @@ void Myst3Engine::processInput(bool interactive) {
 		interactWithHoveredElement();
 	}
 
+	if (shouldPerformAutoSave(_lastSaveTime)) {
+		tryAutoSaving();
+	}
+
 	// Open main menu
 	// This is not checked directly in the event handling code
 	// because menu open requests done while in lookOnly mode
@@ -547,7 +563,7 @@ void Myst3Engine::processInput(bool interactive) {
 	if (_inputEscapePressedNotConsumed && interactive) {
 		_inputEscapePressedNotConsumed = false;
 		if (_cursor->isVisible() && _state->hasVarMenuEscapePressed()) {
-			if (_state->getLocationRoom() != 901)
+			if (_state->getLocationRoom() != kRoomMenu)
 				_menu->goToNode(100);
 			else
 				_state->setMenuEscapePressed(1);
@@ -725,7 +741,7 @@ void Myst3Engine::drawFrame(bool noSwap) {
 
 	if (getPlatform() == Common::kPlatformXbox) {
 		// The cursor is not drawn in the Xbox version menus and journals
-		cursorVisible &= !(_state->getLocationRoom() == 901 || _state->getLocationRoom() == 902);
+		cursorVisible &= !(_state->getLocationRoom() == kRoomMenu || _state->getLocationRoom() == kRoomJournals);
 	}
 
 	if (cursorVisible)
@@ -839,14 +855,15 @@ void Myst3Engine::loadNode(uint16 nodeID, uint32 roomID, uint32 ageID) {
 
 	runNodeInitScripts();
 
-	// These effects can only be created after running the node init scripts
+	// The effects can only be created after running the node init scripts
+	_node->initEffects();
 	_shakeEffect = ShakeEffect::create(this);
 	_rotationEffect = RotationEffect::create(this);
 
 	// WORKAROUND: In Narayan, the scripts in node NACH 9 test on var 39
 	// without first reinitializing it leading to Saavedro not always giving
 	// Releeshan to the player when he is trapped between both shields.
-	if (nodeID == 9 && roomID == 801)
+	if (nodeID == 9 && roomID == kRoomNarayan)
 		_state->setVar(39, 0);
 }
 
@@ -984,23 +1001,34 @@ void Myst3Engine::runBackgroundSoundScriptsFromNode(uint16 nodeID, uint32 roomID
 
 	if (!nodeData) return;
 
-	// Stop previous music when changing room
-	if (_backgroundSoundScriptLastRoomId != roomID) {
-		if (_backgroundSoundScriptLastRoomId != 0
-				&& _backgroundSoundScriptLastRoomId != 901
-				&& _backgroundSoundScriptLastRoomId != 902
-				&& roomID != 0 && roomID != 901 && roomID != 902) {
+	if (_backgroundSoundScriptLastRoomId != roomID || _backgroundSoundScriptLastAgeId != ageID) {
+		bool sameScript;
+		if (   _backgroundSoundScriptLastRoomId != 0 && roomID != 0
+		    && _backgroundSoundScriptLastAgeId  != 0 && ageID  != 0) {
+			sameScript = _db->areRoomsScriptsEqual(_backgroundSoundScriptLastRoomId, _backgroundSoundScriptLastAgeId,
+			                                       roomID, ageID, kScriptTypeBackgroundSound);
+		} else {
+			sameScript = false;
+		}
+
+		// Stop previous music when the music script changes
+		if (!sameScript
+		    && _backgroundSoundScriptLastRoomId != kRoomMenu
+		    && _backgroundSoundScriptLastRoomId != kRoomJournals
+		    && roomID != kRoomMenu
+		    && roomID != kRoomJournals) {
+
 			_sound->stopMusic(_state->getSoundScriptFadeOutDelay());
 
-			if (nodeData->backgroundSoundScripts.size() != 0) {
+			if (!nodeData->backgroundSoundScripts.empty()) {
 				_state->setSoundScriptsPaused(1);
 				_state->setSoundScriptsTimer(0);
 			}
 		}
 
 		_backgroundSoundScriptLastRoomId = roomID;
+		_backgroundSoundScriptLastAgeId  = ageID;
 	}
-
 
 	for (uint j = 0; j < nodeData->backgroundSoundScripts.size(); j++) {
 		if (_state->evaluate(nodeData->backgroundSoundScripts[j].condition)) {
@@ -1479,12 +1507,34 @@ void Myst3Engine::dragItem(uint16 statusVar, uint16 movie, uint16 frame, uint16 
 	}
 }
 
+bool Myst3Engine::canSaveGameStateCurrently() {
+	bool inMenuWithNoGameLoaded = _state->getLocationRoom() == kRoomMenu && _state->getMenuSavedAge() == 0;
+	return canLoadGameStateCurrently() && !inMenuWithNoGameLoaded && _cursor->isVisible();
+}
+
 bool Myst3Engine::canLoadGameStateCurrently() {
 	// Loading from the GMM is only possible when the game is interactive
 	// This is to prevent loading from inner loops. Loading while
 	// in an inner loop can cause the exit condition to never happen,
 	// or can unload required resources.
 	return _interactive;
+}
+
+void Myst3Engine::tryAutoSaving() {
+	if (!canSaveGameStateCurrently()) {
+		return; // Can't save right now, try again on the next frame
+	}
+
+	_lastSaveTime = _system->getMillis();
+
+	// Get a thumbnail of the game screen
+	if (!_menu->isOpen())
+		_menu->generateSaveThumbnail();
+
+	Common::Error result = saveGameState(0, "Autosave");
+	if (result.getCode() != Common::kNoError) {
+		warning("Unable to autosave: %s.", result.getDesc().c_str());
+	}
 }
 
 Common::Error Myst3Engine::loadGameState(int slot) {
@@ -1506,6 +1556,8 @@ Common::Error Myst3Engine::loadGameState(Common::String fileName, TransitionType
 
 	_inventory->loadFromState();
 
+	// Leave the load menu
+	_state->setViewType(kMenu);
 	_state->setLocationNextAge(_state->getMenuSavedAge());
 	_state->setLocationNextRoom(_state->getMenuSavedRoom());
 	_state->setLocationNextNode(_state->getMenuSavedNode());
@@ -1518,6 +1570,52 @@ Common::Error Myst3Engine::loadGameState(Common::String fileName, TransitionType
 	_sound->playEffect(696, 60);
 
 	goToNode(0, transition);
+	return Common::kNoError;
+}
+
+static bool isValidSaveFileChar(char c) {
+	// Limit it to letters, digits, and a few other characters that should be safe
+	return Common::isAlnum(c) || c == ' ' || c == '_' || c == '+' || c == '-' || c == '.';
+}
+
+static bool isValidSaveFileName(const Common::String &desc) {
+	for (uint32 i = 0; i < desc.size(); i++)
+		if (!isValidSaveFileChar(desc[i]))
+			return false;
+
+	return true;
+}
+
+Common::Error Myst3Engine::saveGameState(int slot, const Common::String &desc) {
+	assert(!desc.empty());
+
+	if (!isValidSaveFileName(desc)) {
+		return Common::Error(Common::kCreatingFileFailed, _("Invalid file name for saving"));
+	}
+
+	// Strip extension
+	Common::String saveName = desc;
+	if (desc.hasSuffixIgnoreCase(".M3S") || desc.hasSuffixIgnoreCase(".M3X")) {
+		saveName.erase(desc.size() - 4, desc.size());
+	}
+
+	// Try to use an already generated thumbnail
+	const Graphics::Surface *thumbnail = _menu->borrowSaveThumbnail();
+	if (!thumbnail) {
+		return Common::Error(Common::kUnknownError, "No thumbnail");
+	}
+
+	Common::String fileName = Saves::buildName(saveName.c_str(), getPlatform());
+	Common::ScopedPtr<Common::OutSaveFile> save(_saveFileMan->openForSaving(fileName));
+	if (!save) {
+		return _saveFileMan->getError();
+	}
+
+	// Save the state and the thumbnail
+	if (!_state->save(save.get(), saveName, thumbnail)) {
+		return Common::kUnknownError;
+	}
+
 	return Common::kNoError;
 }
 
@@ -1832,6 +1930,12 @@ void Myst3Engine::pauseEngineIntern(bool pause) {
 	}
 
 	_state->pauseEngine(pause);
+
+	// Grab a game screen thumbnail in case we need one when writing a save file
+	if (pause && !_menu->isOpen()) {
+		// Opening the menu generates a save thumbnail so we only generate it if the menu is not open
+		_menu->generateSaveThumbnail();
+	}
 
 	// Unlock the mouse so that the cursor is visible when the GMM opens
 	if (_state->getViewType() == kCube && _cursor->isPositionLocked()) {

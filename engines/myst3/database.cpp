@@ -372,70 +372,70 @@ NodeWalker::~NodeWalker() {
 }
 
 static const RoomData roomsXXXX[] = {
-		{ 101, "XXXX" }
+		{ kRoomShared,        "XXXX" }
 };
 
 static const RoomData roomsINTR[] = {
-		{ 201, "INTR" }
+		{ kRoomIntro,         "INTR" }
 };
 
 static const RoomData roomsTOHO[] = {
-		{ 301, "TOHO" }
+		{ kRoomTomahnaStart,  "TOHO" }
 };
 
 static const RoomData roomsTOHB[] = {
-		{ 401, "TOHB" }
+		{ kRoomTomahnaReturn, "TOHB" }
 };
 
 static const RoomData roomsLE[] = {
-		{ 501, "LEIS" },
-		{ 502, "LEOS" },
-		{ 503, "LEET" },
-		{ 504, "LELT" },
-		{ 505, "LEMT" },
-		{ 506, "LEOF" }
+		{ kJnaninStart,       "LEIS" },
+		{ kRoomLeos,          "LEOS" },
+		{ kRoomLeet,          "LEET" },
+		{ kRoomLelt,          "LELT" },
+		{ kRoomLemt,          "LEMT" },
+		{ kRoomLeof,          "LEOF" }
 };
 
 static const RoomData roomsLI[] = {
-		{ 601, "LIDR" },
-		{ 602, "LISW" },
-		{ 603, "LIFO" },
-		{ 604, "LISP" },
-		{ 605, "LINE" }
+		{ kRoomEdannaStart,   "LIDR" },
+		{ kRoomLisw,          "LISW" },
+		{ kRoomLifo,          "LIFO" },
+		{ kRoomLisp,          "LISP" },
+		{ kRoomLine,          "LINE" }
 };
 
 static const RoomData roomsEN[] = {
-		{ 701, "ENSI" },
-		{ 703, "ENPP" },
-		{ 704, "ENEM" },
-		{ 705, "ENLC" },
-		{ 706, "ENDD" },
-		{ 707, "ENCH" },
-		{ 708, "ENLI" }
+		{ kRoomVoltaicStart,  "ENSI" },
+		{ kRoomEnpp,          "ENPP" },
+		{ kRoomEnem,          "ENEM" },
+		{ kRoomEnlc,          "ENLC" },
+		{ kRoomEndd,          "ENDD" },
+		{ kRoomEnch,          "ENCH" },
+		{ kRoomEnli,          "ENLI" }
 };
 
 static const RoomData roomsNA[] = {
-		{ 801, "NACH" }
+		{ kRoomNarayan,       "NACH" }
 };
 
 static const RoomData roomsMENU[] = {
-		{ 901, "MENU" },
-		{ 902, "JRNL" },
-		{ 903, "DEMO" },
-		{ 904, "ATIX" }
+		{ kRoomMenu,          "MENU" },
+		{ kRoomJournals,      "JRNL" },
+		{ kRoomDemo,          "DEMO" },
+		{ kRoomAtix,          "ATIX" }
 };
 
 static const RoomData roomsMA[] = {
-		{ 1001, "MACA" },
-		{ 1002, "MAIS" },
-		{ 1003, "MALL" },
-		{ 1004, "MASS" },
-		{ 1005, "MAWW" },
-		{ 1006, "MATO" }
+		{ kRoomAmateriaStart, "MACA" },
+		{ kRoomMais,          "MAIS" },
+		{ kRoomMall,          "MALL" },
+		{ kRoomMass,          "MASS" },
+		{ kRoomMaww,          "MAWW" },
+		{ kRoomMato,          "MATO" }
 };
 
 static const RoomData roomsLOGO[] = {
-		{ 1101, "LOGO" }
+		{ kLogo,              "LOGO" }
 };
 
 const AgeData Database::_ages[] = {
@@ -605,7 +605,7 @@ const RoomData *Database::findRoomData(uint32 roomID, uint32 ageID) const {
 		}
 	}
 
-	error("No room with ID %d", roomID);
+	error("No room with ID %d in age %d", roomID, ageID);
 }
 
 Common::Array<NodePtr> Database::readRoomScripts(const RoomData *room) const {
@@ -687,7 +687,7 @@ void Database::patchNodeScripts(const RoomData *room, Common::Array<NodePtr> &no
 }
 
 bool Database::isCommonRoom(uint32 roomID, uint32 ageID) const {
-	return roomID == 101 || roomID == 901 || roomID == 902;
+	return roomID == kRoomShared || roomID == kRoomMenu || roomID == kRoomJournals;
 }
 
 void Database::cacheRoom(uint32 roomID, uint32 ageID) {
@@ -827,6 +827,27 @@ Common::SeekableReadStream *Database::getRoomScriptStream(const char *room, Scri
 	return nullptr;
 }
 
+bool Database::areRoomsScriptsEqual(uint32 roomID1, uint32 ageID1, uint32 roomID2, uint32 ageID2, ScriptType scriptType) {
+	const RoomData *data1 = findRoomData(roomID1, ageID1);
+	const RoomData *data2 = findRoomData(roomID2, ageID2);
+
+	int32 startOffset1 = -1;
+	int32 startOffset2 = -1;
+	for (uint i = 0; i < _roomScriptsIndex.size(); i++) {
+		if (_roomScriptsIndex[i].room.equalsIgnoreCase(data1->name)
+		    && _roomScriptsIndex[i].type == scriptType) {
+			startOffset1 = _roomScriptsStartOffset + _roomScriptsIndex[i].offset;
+		}
+
+		if (_roomScriptsIndex[i].room.equalsIgnoreCase(data2->name)
+		    && _roomScriptsIndex[i].type == scriptType) {
+			startOffset2 = _roomScriptsStartOffset + _roomScriptsIndex[i].offset;
+		}
+	}
+
+	return startOffset1 == startOffset2;
+}
+
 int16 Database::getGameLanguageCode() const {
 	// The monolingual versions of the game always use 0 as the language code
 	if (_localizationType == kLocMonolingual) {
@@ -864,7 +885,7 @@ void Database::patchLanguageMenu() {
 	//	op 194, runPuzzle1 ( 18 )
 	//	op 194, runPuzzle1 ( 19 )
 
-	NodePtr languageMenu = getNodeData(530, 901, 9);
+	NodePtr languageMenu = getNodeData(530, kRoomMenu, 9);
 	languageMenu->hotspots[5].script[1].args[1] = getGameLanguageCode();
 }
 

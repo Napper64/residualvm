@@ -48,7 +48,7 @@ private:
 	bool Cmd_ForceScript(int argc, const char **argv);
 	bool Cmd_DecompileScript(int argc, const char **argv);
 	bool Cmd_TestDecompiler(int argc, const char** argv);
-	bool Cmd_ListInventory(int argc, const char **argv);
+	bool Cmd_ListInventoryItems(int argc, const char **argv);
 	bool Cmd_EnableInventoryItem(int argc, const char **argv);
 	bool Cmd_ListLocations(int argc, const char** argv);
 	bool Cmd_ListScripts(int argc, const char** argv);
@@ -58,7 +58,6 @@ private:
 	bool Cmd_ChangeLocation(int argc, const char **argv);
 	bool Cmd_ChangeChapter(int argc, const char **argv);
 	bool Cmd_ChangeKnowledge(int argc, const char **argv);
-	bool Cmd_SelectDialogOption(int argc, const char **argv);
 
 	Common::Array<Resources::Script *> listAllLocationScripts() const;
 	void decompileScriptChildren(Stark::Resources::Object *level);

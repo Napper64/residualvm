@@ -23,8 +23,9 @@
 #ifndef DATABASE_H_
 #define DATABASE_H_
 
-#include "common/scummsys.h"
 #include "engines/myst3/hotspot.h"
+
+#include "common/scummsys.h"
 #include "common/str.h"
 #include "common/language.h"
 #include "common/platform.h"
@@ -49,6 +50,43 @@ enum MystLanguage {
 	kGerman  = 3,
 	kItalian = 4,
 	kSpanish = 5
+};
+
+enum RoomID {
+	kRoomShared        = 101,
+	kRoomIntro         = 201,
+	kRoomTomahnaStart  = 301,
+	kRoomTomahnaReturn = 401,
+	kJnaninStart       = 501,
+	kRoomLeos          = 502,
+	kRoomLeet          = 503,
+	kRoomLelt          = 504,
+	kRoomLemt          = 505,
+	kRoomLeof          = 506,
+	kRoomEdannaStart   = 601,
+	kRoomLisw          = 602,
+	kRoomLifo          = 603,
+	kRoomLisp          = 604,
+	kRoomLine          = 605,
+	kRoomVoltaicStart  = 701,
+	kRoomEnpp          = 703,
+	kRoomEnem          = 704,
+	kRoomEnlc          = 705,
+	kRoomEndd          = 706,
+	kRoomEnch          = 707,
+	kRoomEnli          = 708,
+	kRoomNarayan       = 801,
+	kRoomMenu          = 901,
+	kRoomJournals      = 902,
+	kRoomDemo          = 903,
+	kRoomAtix          = 904,
+	kRoomAmateriaStart = 1001,
+	kRoomMais          = 1002,
+	kRoomMall          = 1003,
+	kRoomMass          = 1004,
+	kRoomMaww          = 1005,
+	kRoomMato          = 1006,
+	kLogo              = 1101
 };
 
 struct NodeData {
@@ -182,6 +220,9 @@ public:
 
 	int16 getGameLanguageCode() const;
 
+	/** Check if the scripts for two rooms are identical */
+	bool areRoomsScriptsEqual(uint32 roomID1, uint32 ageID1, uint32 roomID2, uint32 ageID2, ScriptType scriptType);
+
 private:
 	struct RoomKeyHash {
 		uint operator()(const RoomKey &v) const {
@@ -206,7 +247,7 @@ private:
 	Common::HashMap<uint32, int16> _roomZipBitIndex;
 
 	// 'myst3.dat' cached data
-	static const uint kDatVersion = 2;
+	static const uint kDatVersion = 3;
 	Common::SeekableReadStream *_datFile;
 	Common::Array<RoomScripts> _roomScriptsIndex;
 	int32 _roomScriptsStartOffset;

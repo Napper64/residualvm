@@ -49,6 +49,7 @@ public:
 	void open() override;
 	void close() override;
 	void render() override;
+	void onScreenChanged() override;
 	void handleMouseMove() override;
 	void handleClick() override;
 	void handleRightClick() override;
@@ -57,12 +58,10 @@ public:
 	/** Get individual windows */
 	InventoryWindow *getInventoryWindow() const;
 	GameWindow *getGameWindow() const;
+	DialogPanel *getDialogPanel() const;
 
 	/** Clear any location dependant state */
 	void reset();
-
-	/** Called when the screen resolution changes */
-	void onScreenChanged();
 
 	/** A new item has been added to the player's inventory */
 	void notifyInventoryItemEnabled(uint16 itemIndex);
@@ -86,6 +85,7 @@ private:
 
 	typedef void (Window::*WindowHandler)();
 	void dispatchEvent(WindowHandler handler);
+	void pauseGame(bool pause);
 };
 
 } // End of namespace Stark

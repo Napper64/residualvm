@@ -120,8 +120,11 @@ public:
 	/** Write the states in the store to a stream */
 	void writeStateToStream(Common::WriteStream *stream);
 
+	/** Clear all the state, effectively preparing to start a new game */
+	void clear();
+
 	static const uint kMinSaveVersion = 6;
-	static const uint kSaveVersion = 9;
+	static const uint kSaveVersion = 10;
 
 private:
 	class ResourceTreeState {
@@ -146,8 +149,6 @@ private:
 
 	void readResourceTree(Resources::Object *resource, Common::SeekableReadStream *stream, bool current, uint32 version);
 	void writeResourceTree(Resources::Object *resource, Common::WriteStream *stream, bool current);
-
-	void clear();
 
 	ResourceTreeStateMap _stateStore;
 };

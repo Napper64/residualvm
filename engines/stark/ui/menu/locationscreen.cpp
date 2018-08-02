@@ -35,6 +35,8 @@
 
 #include "engines/stark/visual/text.h"
 
+#include "common/system.h"
+
 namespace Stark {
 
 StaticLocationScreen::StaticLocationScreen(Gfx::Driver *gfx, Cursor *cursor,
@@ -90,7 +92,7 @@ void StaticLocationScreen::onMouseMove(const Common::Point &pos) {
 	// The first widget is always the background. It is ignored below.
 
 	if (newHoveredWidget != _hoveredWidgetIndex) {
-		if (_hoveredWidgetIndex > 0) {
+		if (_hoveredWidgetIndex > 0 && uint(_hoveredWidgetIndex) < _widgets.size()) {
 			_widgets[_hoveredWidgetIndex]->onMouseLeave();
 		}
 
@@ -122,6 +124,12 @@ void StaticLocationScreen::onRender() {
 	}
 }
 
+void StaticLocationScreen::onScreenChanged() {
+	for (uint i = 0; i < _widgets.size(); i++) {
+		_widgets[i]->onScreenChanged();
+	}
+}
+
 StaticLocationWidget::StaticLocationWidget(const char *renderEntryName, WidgetOnClickCallback *onClickCallback,
                                            WidgetOnMouseMoveCallback *onMouseMoveCallback):
 		_onClick(onClickCallback),
@@ -131,26 +139,24 @@ StaticLocationWidget::StaticLocationWidget(const char *renderEntryName, WidgetOn
 		_soundMouseEnter(nullptr),
 		_soundMouseClick(nullptr),
 		_visible(true) {
-	Resources::Location *location = StarkStaticProvider->getLocation();
+	if (renderEntryName) {
+		Resources::Location *location = StarkStaticProvider->getLocation();
+		_renderEntry = location->getRenderEntryByName(renderEntryName);
 
-	// TODO: Move to location ?
-	Gfx::RenderEntryArray renderEntries = location->listRenderEntries();
-	for (uint i = 0; i < renderEntries.size(); i++) {
-		if (renderEntries[i]->getName().equalsIgnoreCase(renderEntryName)) {
-			_renderEntry = renderEntries[i];
-			break;
+		if (_renderEntry == nullptr) {
+			debug("Widget disabled: unable to find render entry with name '%s' in location '%s'",
+					renderEntryName, location->getName().c_str());
+			setVisible(false);
+		} else {
+			_item = _renderEntry->getOwner();
 		}
 	}
-
-	if (_renderEntry == nullptr) {
-		error("Unable to find render entry with name '%s' in location '%s'", renderEntryName, location->getName().c_str());
-	}
-
-	_item = _renderEntry->getOwner();
 }
 
 void StaticLocationWidget::render() {
-	_renderEntry->render();
+	if (_renderEntry) {
+		_renderEntry->render();
+	}
 }
 
 bool StaticLocationWidget::isVisible() const {
@@ -162,6 +168,8 @@ void StaticLocationWidget::setVisible(bool visible) {
 }
 
 bool StaticLocationWidget::isMouseInside(const Common::Point &mousePos) const {
+	if (!_renderEntry) return false;
+
 	Common::Point relativePosition;
 	return _renderEntry->containsPoint(mousePos, relativePosition);
 }
@@ -171,6 +179,11 @@ void StaticLocationWidget::onClick() {
 
 	if (_soundMouseClick) {
 		_soundMouseClick->play();
+		// Ensure the click sound is played completely
+		while (_soundMouseClick->isPlaying()) {
+			g_system->delayMillis(10);
+			StarkGfx->flipBuffer();
+		}
 	}
 
 	if (_onClick) {
@@ -179,7 +192,9 @@ void StaticLocationWidget::onClick() {
 }
 
 void StaticLocationWidget::onGameLoop() {
-	_item->onGameLoop();
+	if (_item) {
+		_item->onGameLoop();
+	}
 }
 
 void StaticLocationWidget::onMouseEnter() {
@@ -205,13 +220,17 @@ void StaticLocationWidget::setupSounds(int16 enterSound, int16 clickSound) {
 }
 
 void StaticLocationWidget::setTextColor(uint32 textColor) {
+	if (!_renderEntry) return;
+
 	VisualText *text = _renderEntry->getText();
 	assert(text);
 
 	text->setColor(textColor);
 }
 
-void StaticLocationWidget::resetTextTexture() {
+void StaticLocationWidget::onScreenChanged() {
+	if (!_renderEntry) return;
+
 	VisualText *text = _renderEntry->getText();
 	if (text) {
 		text->resetTexture();
@@ -222,6 +241,14 @@ void StaticLocationWidget::onMouseMove(const Common::Point &mousePos) {
 	if (_onMouseMove) {
 		(*_onMouseMove)(*this, mousePos);
 	}
+}
+
+Common::Point StaticLocationWidget::getPosition() const {
+	if (_renderEntry) {
+		return _renderEntry->getPosition();
+	}
+
+	return Common::Point(0, 0);
 }
 
 StaticLocationWidget::~StaticLocationWidget() {

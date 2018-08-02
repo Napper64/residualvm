@@ -350,6 +350,8 @@ void ResourceProvider::commitActiveLocationsState() {
 }
 
 void ResourceProvider::shutdown() {
+	_stateProvider->clear();
+
 	// Flush the locations list
 	for (CurrentList::const_iterator it = _locations.begin(); it != _locations.end(); it++) {
 		Current *location = *it;
@@ -362,11 +364,16 @@ void ResourceProvider::shutdown() {
 	_locations.clear();
 
 	// Return the global resources
-	_archiveLoader->returnRoot(_archiveLoader->buildArchiveName(_global->getLevel()));
-	_archiveLoader->returnRoot("x.xarc");
+	if (_global->getLevel()) {
+		_archiveLoader->returnRoot(_archiveLoader->buildArchiveName(_global->getLevel()));
+		_global->setLevel(nullptr);
+	}
 
-	_global->setLevel(nullptr);
-	_global->setRoot(nullptr);
+	if (_global->getRoot()) {
+		_archiveLoader->returnRoot("x.xarc");
+		_global->setRoot(nullptr);
+	}
+
 	_global->setCurrent(nullptr);
 	_global->setInventory(nullptr);
 	_global->setApril(nullptr);

@@ -31,6 +31,7 @@
 #include "engines/stark/services/archiveloader.h"
 #include "engines/stark/services/services.h"
 #include "engines/stark/services/userinterface.h"
+#include "engines/stark/services/settings.h"
 
 namespace Stark {
 
@@ -54,11 +55,30 @@ FMVScreen::~FMVScreen() {
 }
 
 void FMVScreen::play(const Common::String &name) {
-	Common::SeekableReadStream *stream = StarkArchiveLoader->getExternalFile(name, "Global/");
+	Common::SeekableReadStream *stream = nullptr;
+
+	// Play the low-resolution video, if possible
+	if (!StarkSettings->getBoolSetting(Settings::kHighFMV) && StarkSettings->hasLowResFMV()) {
+		Common::String lowResName = name;
+		lowResName.erase(lowResName.size() - 4);
+		lowResName += "_lo_res.bbb";
+
+		stream = StarkArchiveLoader->getExternalFile(lowResName, "Global/");
+		if (!stream) {
+			debug("Could not open %s", lowResName.c_str());
+		}
+	}
+
+	// Play the original video
+	if (!stream) {
+		stream = StarkArchiveLoader->getExternalFile(name, "Global/");
+	}
+
 	if (!stream) {
 		warning("Could not open %s", name.c_str());
 		return;
 	}
+
 	_decoder->loadStream(stream);
 	if (!_decoder->isVideoLoaded()) {
 		error("Could not open %s", name.c_str());
@@ -77,7 +97,8 @@ void FMVScreen::onRender() {
 		stop();
 	}
 
-	_surfaceRenderer->render(_texture, Common::Point(0, Gfx::Driver::kTopBorderHeight));
+	_surfaceRenderer->render(_texture, Common::Point(0, Gfx::Driver::kTopBorderHeight),
+			Gfx::Driver::kGameViewportWidth, Gfx::Driver::kGameViewportHeight);
 }
 
 bool FMVScreen::isPlaying() {

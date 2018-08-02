@@ -521,5 +521,37 @@ void Location::saveLoadCurrent(ResourceSerializer *serializer) {
 	}
 }
 
+Layer *Location::getLayerByName(const Common::String &name) {
+	for (uint i = 0; i < _layers.size(); ++i) {
+		if (_layers[i]->getName().equalsIgnoreCase(name)) {
+			return _layers[i];
+		}
+	}
+	return nullptr;
+}
+
+Gfx::RenderEntry *Location::getRenderEntryByName(const Common::String &name) {
+	Gfx::RenderEntryArray renderEntries = listRenderEntries();
+	for (uint i = 0; i < renderEntries.size(); ++i) {
+		if (renderEntries[i]->getName().equalsIgnoreCase(name)) {
+			return renderEntries[i];
+		}
+	}
+	return nullptr;
+}
+
+Common::Array<Common::Point> Location::listExitPositions() {
+	Common::Array<Item *> items = listChildrenRecursive<Item>();
+	Common::Array<Common::Point> positions;
+
+	Common::Array<Item *>::iterator element = items.begin();
+	while (element != items.end()) {
+		positions.push_back((*element)->listExitPositions());
+		++element;
+	}
+
+	return positions;
+}
+
 } // End of namespace Resources
 } // End of namespace Stark
