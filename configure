@@ -29,13 +29,20 @@ export LANGUAGE
 
 # Save the current environment variables for next runs
 SAVED_CONFIGFLAGS=$@
-SAVED_LDFLAGS=$LDFLAGS
+SAVED_AR=$AR
+SAVED_AS=$AS
+SAVED_ASFLAGS=$ASFLAGS
+SAVED_CPPFLAGS=$CPPFLAGS
 SAVED_CXX=$CXX
 SAVED_CXXFLAGS=$CXXFLAGS
-SAVED_CPPFLAGS=$CPPFLAGS
-SAVED_ASFLAGS=$ASFLAGS
-SAVED_WINDRESFLAGS=$WINDRESFLAGS
+SAVED_LD=$LD
+SAVED_LDFLAGS=$LDFLAGS
+SAVED_PKG_CONFIG_LIBDIR=$PKG_CONFIG_LIBDIR
+SAVED_RANLIB=$RANLIB
 SAVED_SDL_CONFIG=$SDL_CONFIG
+SAVED_STRIP=$STRIP
+SAVED_WINDRES=$WINDRES
+SAVED_WINDRESFLAGS=$WINDRESFLAGS
 
 # Use environment vars if set
 CXXFLAGS="$CXXFLAGS $CPPFLAGS"
@@ -211,6 +218,7 @@ _sparklepath=
 _sdlconfig=sdl2-config
 _libcurlconfig=curl-config
 _freetypeconfig=freetype-config
+_freetype_found="false"
 _sdlpath="$PATH"
 _freetypepath="$PATH"
 _libcurlpath="$PATH"
@@ -1058,14 +1066,23 @@ Optional Libraries:
   --disable-libcurl        disable libcurl networking library [autodetect]
 
 Some influential environment variables:
-  LDFLAGS        linker flags, e.g. -L<lib dir> if you have libraries in a
-                 nonstandard directory <lib dir>
-  CXX            C++ compiler command
-  CXXFLAGS       C++ compiler flags
-  CPPFLAGS       C++ preprocessor flags, e.g. -I<include dir> if you have
-                 headers in a nonstandard directory <include dir>
-  ASFLAGS        assembler flags
-  WINDRESFLAGS   Windows resource compiler flags
+  AR                 archiver command
+  AS                 assembler command
+  ASFLAGS            assembler flags
+  CPPFLAGS           C++ preprocessor flags, e.g. -I<include dir> if you have
+                     headers in a nonstandard directory <include dir>
+  CXX                C++ compiler command
+  CXXFLAGS           C++ compiler flags
+  LD                 linker command
+  LDFLAGS            linker flags, e.g. -L<lib dir> if you have libraries in a
+                     nonstandard directory <lib dir>
+  PKG_CONFIG_LIBDIR  list of directories where pkg-config ‘.pc’ files are
+                     looked up
+  RANLIB             archive indexer command
+  SDL_CONFIG         SDL configurer script name (not path)
+  STRIP              symbol stripper command
+  WINDRES            Windows resource compiler command
+  WINDRESFLAGS       Windows resource compiler flags
 
 EOF
 		exit 0
@@ -1082,7 +1099,7 @@ cat >> $TMPLOG <<EOF
 Invocation command line was:
 $0 $@
 Saved environment variables:
-LDFLAGS="$SAVED_LDFLAGS" CXX="$SAVED_CXX" CXXFLAGS="$SAVED_CXXFLAGS" CPPFLAGS="$SAVED_CPPFLAGS" ASFLAGS="$SAVED_ASFLAGS" WINDRESFLAGS="$SAVED_WINDRESFLAGS" SDL_CONFIG="$SAVED_SDL_CONFIG"
+AR="$SAVED_AR" AS="$SAVED_AS" ASFLAGS="$SAVED_ASFLAGS" CPPFLAGS="$SAVED_CPPFLAGS" CXX="$SAVED_CXX" CXXFLAGS="$SAVED_CXXFLAGS" LD="$SAVED_LD" LDFLAGS="$SAVED_LDFLAGS" PKG_CONFIG_LIBDIR="$SAVED_PKG_CONFIG_LIBDIR" RANLIB="$SAVED_RANLIB" SDL_CONFIG="$SAVED_SDL_CONFIG" STRIP="$SAVED_STRIP" WINDRES="$SAVED_WINDRES" WINDRESFLAGS="$SAVED_WINDRESFLAGS"
 EOF
 
 
@@ -1865,7 +1882,26 @@ if test -z "$CXX"; then
 	exit 1
 fi
 
-# By default, use the C++ compiler as linker
+if test -n "$RANLIB"; then
+	_ranlib=$RANLIB
+fi
+
+if test -n "$STRIP"; then
+	_strip=$STRIP
+fi
+
+if test -n "$AR"; then
+	_ar="$AR cru"
+fi
+
+if test -n "$AS"; then
+	_as=$AS
+fi
+
+if test -n "$WINDRES"; then
+	_windres=$WINDRES
+fi
+
 LD=$CXX
 
 #
@@ -2097,13 +2133,17 @@ cc_check -Wpragma-pack -Werror && _no_pragma_pack=yes
 test "$_no_pragma_pack" = yes && append_var CXXFLAGS "-Wno-pragma-pack"
 echo $_no_pragma_pack
 
-echo_n "Checking for $_host_alias-strings... " >> "$TMPLOG"
-if `which $_host_alias-strings >/dev/null 2>&1`; then
-	_strings=$_host_alias-strings
-	echo yes >> "$TMPLOG"
+if test -n "$STRINGS"; then
+	_strings=$STRINGS
 else
-	_strings=strings
-	echo no >> "$TMPLOG"
+	echo_n "Checking for $_host_alias-strings... " >> "$TMPLOG"
+	if `which $_host_alias-strings >/dev/null 2>&1`; then
+		_strings=$_host_alias-strings
+		echo yes >> "$TMPLOG"
+	else
+		_strings=strings
+		echo no >> "$TMPLOG"
+	fi
 fi
 
 #
@@ -3945,6 +3985,18 @@ EOF
 cc_check -lm && append_var LIBS "-lm"
 
 #
+# Check for pkg-config
+#
+echocheck "pkg-config"
+_pkg_config=no
+command -v pkg-config >/dev/null 2>&1 && _pkg_config=yes
+echo "$_pkg_config"
+
+if test "$_pkg_config" = yes && test -n "$_host" && test -z "$PKG_CONFIG_LIBDIR"; then
+	echo "WARNING: When cross-compiling PKG_CONFIG_LIBDIR must be set to the location of the .pc files for the target"
+fi
+
+#
 # Check for Ogg
 #
 echocheck "Ogg"
@@ -4601,7 +4653,7 @@ define_in_config_h_if_yes "$_text_console" 'USE_TEXT_CONSOLE_FOR_DEBUGGER'
 # Check for Unity if taskbar integration is enabled
 #
 echocheck "libunity"
-if test "$_unix" = no || test "$_taskbar" = no; then
+if test "$_unix" = no || test "$_taskbar" = no || test "$_pkg_config" = no; then
 	_libunity=no
 else
 if test "$_libunity" = auto ; then
@@ -4641,28 +4693,44 @@ echo "$_libunity"
 #
 # Check for FreeType2 to be present
 #
+find_freetype() {
+        # Wrapper function which tries to find freetype
+        # either by callimg freetype-config or by using
+        # pkg-config.
+        # As of freetype-2.9.1 the freetype-config file
+        # no longer gets installed by default.
+	if test "$_pkg_config" = "yes" && pkg-config --exists freetype2; then
+		FREETYPE2_LIBS=`pkg-config --libs freetype2`
+		FREETYPE2_CFLAGS=`pkg-config --cflags freetype2`
+		FREETYPE2_STATIC_LIBS=`pkg-config --static --libs freetype2`
+		_freetype_found="true"
+	else
+		# Look for the freetype-config script
+		find_freetypeconfig
+		if test -n "$_freetypeconfig"; then
+			# Since 2.3.12, freetype-config prepends $SYSROOT to everything.
+			# This means we can't pass it a --prefix that includes $SYSROOT.
+			freetypeprefix="$_freetypepath"
+			if test -n "$SYSROOT" -a "$SYSROOT" != "/"; then
+				teststring=VeryImplausibleSysrootX1Y2Z3
+				if ( env SYSROOT=/$teststring "$_freetypeconfig" --cflags | grep $teststring 2> /dev/null > /dev/null ); then
+					echo "Adapting FreeType prefix to SYSROOT" >> "$TMPLOG"
+					freetypeprefix="${freetypeprefix##$SYSROOT}"
+				fi
+			fi
+			FREETYPE2_LIBS=`$_freetypeconfig --prefix="$freetypeprefix" --libs`
+			FREETYPE2_CFLAGS=`$_freetypeconfig --prefix="$freetypeprefix" --cflags`
+			FREETYPE2_STATIC_LIBS=`$_freetypeconfig --prefix="$freetypeprefix" --static --libs 2>/dev/null`
+			_freetype_found="true"
+		fi
+	fi
+}
+
 if test "$_freetype2" != "no"; then
-
-	# Look for the freetype-config script
-	find_freetypeconfig
-
-	if test -z "$_freetypeconfig"; then
+	find_freetype
+	if test $_freetype_found != true; then
 		_freetype2=no
 	else
-		# Since 2.3.12, freetype-config prepends $SYSROOT to everything.
-		# This means we can't pass it a --prefix that includes $SYSROOT.
-		freetypeprefix="$_freetypepath"
-		if test -n "$SYSROOT" -a "$SYSROOT" != "/"; then
-			teststring=VeryImplausibleSysrootX1Y2Z3
-			if ( env SYSROOT=/$teststring "$_freetypeconfig" --cflags | grep $teststring 2> /dev/null > /dev/null ); then
-				echo "Adapting FreeType prefix to SYSROOT" >> "$TMPLOG"
-				freetypeprefix="${freetypeprefix##$SYSROOT}"
-			fi
-		fi
-
-		FREETYPE2_LIBS=`$_freetypeconfig --prefix="$freetypeprefix" --libs`
-		FREETYPE2_CFLAGS=`$_freetypeconfig --prefix="$freetypeprefix" --cflags`
-
 		if test "$_freetype2" = "auto"; then
 			_freetype2=no
 
@@ -4682,7 +4750,7 @@ EOF
 			# required flags for static linking. We abuse this to detect
 			# FreeType2 builds which are static themselves.
 			if test "$_freetype2" != "yes"; then
-				FREETYPE2_LIBS=`$_freetypeconfig --prefix="$_freetypepath" --static --libs 2>/dev/null`
+				FREETYPE2_LIBS="$FREETYPE2_STATIC_LIBS"
 				cc_check_no_clean $FREETYPE2_CFLAGS $FREETYPE2_LIBS && _freetype2=yes
 			fi
 			cc_check_clean
@@ -5529,14 +5597,21 @@ $_mak_plugins
 
 port_mk = $_port_mk
 
-SAVED_CONFIGFLAGS  := $SAVED_CONFIGFLAGS
-SAVED_LDFLAGS      := $SAVED_LDFLAGS
-SAVED_CXX          := $SAVED_CXX
-SAVED_CXXFLAGS     := $SAVED_CXXFLAGS
-SAVED_CPPFLAGS     := $SAVED_CPPFLAGS
-SAVED_ASFLAGS      := $SAVED_ASFLAGS
-SAVED_WINDRESFLAGS := $SAVED_WINDRESFLAGS
-SAVED_SDL_CONFIG   := $SAVED_SDL_CONFIG
+SAVED_CONFIGFLAGS       := $SAVED_CONFIGFLAGS
+SAVED_AR                := $SAVED_AR
+SAVED_AS                := $SAVED_AS
+SAVED_ASFLAGS           := $SAVED_ASFLAGS
+SAVED_CPPFLAGS          := $SAVED_CPPFLAGS
+SAVED_CXX               := $SAVED_CXX
+SAVED_CXXFLAGS          := $SAVED_CXXFLAGS
+SAVED_LD                := $SAVED_LD
+SAVED_LDFLAGS           := $SAVED_LDFLAGS
+SAVED_PKG_CONFIG_LIBDIR := $SAVED_PKG_CONFIG_LIBDIR
+SAVED_RANLIB            := $SAVED_RANLIB
+SAVED_SDL_CONFIG        := $SAVED_SDL_CONFIG
+SAVED_STRIP             := $SAVED_STRIP
+SAVED_WINDRES           := $SAVED_WINDRES
+SAVED_WINDRESFLAGS      := $SAVED_WINDRESFLAGS
 EOF
 
 #

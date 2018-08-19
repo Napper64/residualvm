@@ -61,6 +61,7 @@ OpenGLSDriver::OpenGLSDriver() :
 	_surfaceShader(nullptr),
 	_actorShader(nullptr),
 	_fadeShader(nullptr),
+	_shadowShader(nullptr),
 	_surfaceVBO(0),
 	_fadeVBO(0) {
 }
@@ -71,6 +72,7 @@ OpenGLSDriver::~OpenGLSDriver() {
 	delete _surfaceShader;
 	delete _actorShader;
 	delete _fadeShader;
+	delete _shadowShader;
 }
 
 void OpenGLSDriver::init() {
@@ -84,6 +86,9 @@ void OpenGLSDriver::init() {
 
 	static const char* actorAttributes[] = { "position1", "position2", "bone1", "bone2", "boneWeight", "normal", "texcoord", nullptr };
 	_actorShader = OpenGL::Shader::fromFiles("stark_actor", actorAttributes);
+
+	static const char* shadowAttributes[] = { "position1", "position2", "bone1", "bone2", "boneWeight", nullptr };
+	_shadowShader = OpenGL::Shader::fromFiles("stark_shadow", shadowAttributes);
 
 	static const char* fadeAttributes[] = { "position", nullptr };
 	_fadeShader = OpenGL::Shader::fromFiles("stark_fade", fadeAttributes);
@@ -103,29 +108,24 @@ void OpenGLSDriver::setScreenViewport(bool noScaling) {
 	glViewport(_viewport.left, _viewport.top, _viewport.width(), _viewport.height());
 }
 
-void OpenGLSDriver::setViewport(const Common::Rect &rect, bool noScaling) {
-	if (noScaling) {
-		_viewport = rect;
-		_unscaledViewport = rect;
-	} else {
-		_viewport = Common::Rect(
-				_screenViewport.width() * rect.width() / kOriginalWidth,
-				_screenViewport.height() * rect.height() / kOriginalHeight
-				);
+void OpenGLSDriver::setViewport(const Common::Rect &rect) {
+	_viewport = Common::Rect(
+			_screenViewport.width() * rect.width() / kOriginalWidth,
+			_screenViewport.height() * rect.height() / kOriginalHeight
+			);
 
-		_viewport.translate(
-				_screenViewport.left + _screenViewport.width() * rect.left / kOriginalWidth,
-				_screenViewport.top + _screenViewport.height() * rect.top / kOriginalHeight
-				);
+	_viewport.translate(
+			_screenViewport.left + _screenViewport.width() * rect.left / kOriginalWidth,
+			_screenViewport.top + _screenViewport.height() * rect.top / kOriginalHeight
+			);
 
-		_unscaledViewport = rect;
-	}
+	_unscaledViewport = rect;
 
 	glViewport(_viewport.left, g_system->getHeight() - _viewport.bottom, _viewport.width(), _viewport.height());
 }
 
 void OpenGLSDriver::clearScreen() {
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 }
 
 void OpenGLSDriver::flipBuffer() {
@@ -179,6 +179,12 @@ void OpenGLSDriver::end2DMode() {
 void OpenGLSDriver::set3DMode() {
 	glEnable(GL_DEPTH_TEST);
 	glDepthFunc(GL_LESS);
+
+	// Blending and stencil test are only used in rendering shadows
+	// They are manually enabled and disabled there
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	glStencilFunc(GL_EQUAL, 0, 0xFF);
+	glStencilOp(GL_KEEP, GL_KEEP, GL_INCR);
 }
 
 Common::Rect OpenGLSDriver::getViewport() const {
@@ -199,6 +205,10 @@ OpenGL::Shader *OpenGLSDriver::createSurfaceShaderInstance() {
 
 OpenGL::Shader *OpenGLSDriver::createFadeShaderInstance() {
 	return _fadeShader->clone();
+}
+
+OpenGL::Shader *OpenGLSDriver::createShadowShaderInstance() {
+	return _shadowShader->clone();
 }
 
 Graphics::Surface *OpenGLSDriver::getViewportScreenshot() const {
