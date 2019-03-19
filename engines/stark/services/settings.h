@@ -24,7 +24,10 @@
 #define STARK_SERVICES_SETTINGS_H
 
 #include "common/config-manager.h"
+#include "common/language.h"
+#include "common/ustr.h"
 
+#include "engines/stark/gfx/texture.h"
 #include "engines/stark/services/services.h"
 
 struct ADGameDescription;
@@ -94,10 +97,31 @@ public:
 	/** Check whether the book of secrets is enabled */
 	bool hasBookOfSecrets() { return ConfMan.hasKey("xoBfOsterceS"); }
 
+	/** Should the game try to load external replacement assets? */
+	bool isAssetsModEnabled() const;
+
+	/**
+	 * Should the engine apply alpha pre-multiplication when loading replacement PNGs
+	 *
+	 * When rendering, textures are expected to be in pre-multiplied alpha format.
+	 * It's best to have the PNGs in that format on file to speed up loading by removing
+	 * the need to convert them. However this option enables the conversion when loading
+	 * the files to they can be stored with regular alpha transparency for convenience
+	 * when testing.
+	 */
+	bool shouldPreMultiplyReplacementPNGs() const;
+
+	/** Should linear filtering be used when sampling the background image textures? */
+	Gfx::Texture::SamplingFilter getImageSamplingFilter() const;
+
+	/** The codepage text is encoded in or this version of the game */
+	Common::CodePage getTextCodePage() const;
+
 private:
 	Audio::Mixer *_mixer;
 	bool _hasLowRes;
 	const bool _isDemo;
+	const Common::Language _language;
 
 	const char *_boolKey[6];
 	const char *_intKey[4];

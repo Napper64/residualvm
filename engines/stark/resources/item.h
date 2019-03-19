@@ -33,6 +33,7 @@
 
 namespace Stark {
 
+class AnimHandler;
 class Movement;
 class Visual;
 
@@ -146,7 +147,6 @@ public:
 	virtual void onAllLoaded() override;
 	virtual void saveLoad(ResourceSerializer *serializer) override;
 	virtual void saveLoadCurrent(ResourceSerializer *serializer) override;
-	virtual void onPreDestroy() override;
 
 	// Item API
 	void setEnabled(bool enabled) override;
@@ -450,6 +450,8 @@ public:
 	/** Randomize an idle action animation */
 	Anim *getIdleActionAnim() const;
 
+	AnimHandler *getAnimHandler() const;
+
 protected:
 	void printData() override;
 
@@ -459,6 +461,8 @@ protected:
 
 	ResourceReference _reference;
 	ItemTemplate *_referencedItem;
+
+	AnimHandler *_animHandler;
 };
 
 /**

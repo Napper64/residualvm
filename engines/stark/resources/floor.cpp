@@ -65,7 +65,11 @@ int32 Floor::findFaceHitByRay(const Math::Ray &ray, Math::Vector3d &intersection
 	for (uint32 i = 0; i < _faces.size(); i++) {
 		// TODO: Check the ray's intersection with an AABB first if this ends up being slow
 		if (_faces[i]->intersectRay(ray, intersection)) {
-			return i;
+			if (_faces[i]->isEnabled()) {
+				return i;
+			} else {
+				return -1; // Disabled faces block the ray
+			}
 		}
 	}
 
@@ -75,8 +79,10 @@ int32 Floor::findFaceHitByRay(const Math::Ray &ray, Math::Vector3d &intersection
 int32 Floor::findFaceClosestToRay(const Math::Ray &ray, Math::Vector3d &center) const {
 	float minDistance = FLT_MAX;
 	int32 minFace = -1;
-	for (uint32 i = 0; i < _faces.size(); i++) {
-		if (_faces[i]->hasVertices()) {
+
+	// For some reason, face 0 is not being considered
+	for (uint32 i = 1; i < _faces.size(); i++) {
+		if (_faces[i]->isEnabled() && _faces[i]->hasVertices()) {
 			float distance = _faces[i]->distanceToRay(ray);
 			if (distance < minDistance) {
 				minFace = i;
@@ -103,7 +109,7 @@ FloorFace *Floor::getFace(uint32 index) const {
 
 bool Floor::isSegmentInside(const Math::Line3d &segment) const {
 	// The segment is inside the floor if at least one of its extremities is,
-	// and it does not cross any floor border
+	// and it does not cross any floor border / disabled floor faces
 
 	int32 beginFace = findFaceContainingPoint(segment.begin());
 	if (beginFace < 0) {
@@ -111,9 +117,14 @@ bool Floor::isSegmentInside(const Math::Line3d &segment) const {
 		return false;
 	}
 
+	if (!_faces[beginFace]->isEnabled()) {
+		// The segment begin point is not enabled
+		return false;
+	}
+
 	for (uint i = 0; i < _edges.size(); i++) {
 		const FloorEdge &edge = _edges[i];
-		if (edge.isFloorBorder() && edge.intersectsSegment(this, segment)) {
+		if ((edge.isFloorBorder() || !edge.isEnabled()) && edge.intersectsSegment(this, segment)) {
 			return false;
 		}
 	}

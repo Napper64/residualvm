@@ -35,6 +35,7 @@
 
 #include "engines/stark/visual/text.h"
 
+#include "audio/mixer.h"
 #include "common/system.h"
 
 namespace Stark {
@@ -135,6 +136,14 @@ void StaticLocationScreen::onScreenChanged() {
 	}
 }
 
+void StaticLocationScreen::waitForSoundsToComplete() {
+	while (g_system->getMixer()->hasActiveChannelOfType(Audio::Mixer::kSFXSoundType)) {
+		StarkGfx->clearScreen();
+		g_system->delayMillis(10);
+		StarkGfx->flipBuffer();
+	}
+}
+
 StaticLocationWidget::StaticLocationWidget(const char *renderEntryName, WidgetOnClickCallback *onClickCallback,
                                            WidgetOnMouseMoveCallback *onMouseMoveCallback):
 		_onClick(onClickCallback),
@@ -176,7 +185,7 @@ bool StaticLocationWidget::isMouseInside(const Common::Point &mousePos) const {
 	if (!_renderEntry) return false;
 
 	Common::Point relativePosition;
-	return _renderEntry->containsPoint(mousePos, relativePosition);
+	return _renderEntry->containsPoint(mousePos, relativePosition, Common::Rect());
 }
 
 void StaticLocationWidget::onClick() {
@@ -184,11 +193,7 @@ void StaticLocationWidget::onClick() {
 
 	if (_soundMouseClick) {
 		_soundMouseClick->play();
-		// Ensure the click sound is played completely
-		while (_soundMouseClick->isPlaying()) {
-			g_system->delayMillis(10);
-			StarkGfx->flipBuffer();
-		}
+		_soundMouseClick->setStopOnDestroy(false);
 	}
 
 	if (_onClick) {
@@ -224,7 +229,7 @@ void StaticLocationWidget::setupSounds(int16 enterSound, int16 clickSound) {
 	}
 }
 
-void StaticLocationWidget::setTextColor(uint32 textColor) {
+void StaticLocationWidget::setTextColor(const Color &textColor) {
 	if (!_renderEntry) return;
 
 	VisualText *text = _renderEntry->getText();

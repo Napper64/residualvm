@@ -24,6 +24,7 @@
 
 #include "engines/stark/formats/xrc.h"
 #include "engines/stark/gfx/renderentry.h"
+#include "engines/stark/model/animhandler.h"
 #include "engines/stark/movement/movement.h"
 #include "engines/stark/visual/actor.h"
 
@@ -134,7 +135,7 @@ void Item::setMovement(Movement *movement) {
 	}
 
 	if (_movement && !_movement->hasEnded()) {
-		_movement->stop();
+		_movement->stop(true);
 	}
 
 	delete _movement;
@@ -245,26 +246,23 @@ void ItemVisual::saveLoadCurrent(ResourceSerializer *serializer) {
 
 	// Apply the animation once again now the data from the item templates has been loaded.
 	// This ensures template level textures and models are applied when loading.
+
+	serializer->syncAsSint32LE(_currentAnimActivity, 11);
+	serializer->syncAsResourceReference(&_animHierarchy, 11);
 	if (serializer->isLoading()) {
 		if (_animHierarchy) {
 			setAnimHierarchy(_animHierarchy);
 		}
+	}
 
+	serializer->syncAsResourceReference(&_actionAnim, 11);
+	if (serializer->isLoading()) {
 		if (_actionAnim) {
 			_actionAnim->applyToItem(this);
 		} else {
 			setAnimActivity(_currentAnimActivity);
 		}
 	}
-}
-
-void ItemVisual::onPreDestroy() {
-	if (_actionAnim) {
-		_actionAnim->removeFromItem(this);
-		_actionAnim = nullptr;
-	}
-
-	Item::onPreDestroy();
 }
 
 void ItemVisual::setEnabled(bool enabled) {
@@ -744,7 +742,7 @@ void FloorPositionedItem::placeOnBookmark(Bookmark *target) {
 
 	// Set the z coordinate using the floor height at that position
 	if (_floorFaceIndex < 0) {
-		warning("Item '%s' has been place out of the floor field", getName().c_str());
+		warning("Item '%s' has been placed out of the floor field", getName().c_str());
 	}
 }
 
@@ -814,6 +812,12 @@ void FloorPositionedImageItem::readData(Formats::XRCReadStream *stream) {
 
 	setFloorFaceIndex(stream->readSint32LE());
 	_position = stream->readPoint();
+
+	// WORKAROUND: For the shelves having an incorrect position in the game datafiles
+	Location *location = findParent<Location>();
+	if (_name == "Shelves" && location && location->getName() == "April's Room") {
+		_position = Common::Point(543, 77);
+	}
 }
 
 Gfx::RenderEntry *FloorPositionedImageItem::getRenderEntry(const Common::Point &positionOffset) {
@@ -898,6 +902,7 @@ Common::Array<Common::Point> ImageItem::listExitPositions() {
 }
 
 ModelItem::~ModelItem() {
+	delete _animHandler;
 }
 
 ModelItem::ModelItem(Object *parent, byte subType, uint16 index, const Common::String &name) :
@@ -905,7 +910,8 @@ ModelItem::ModelItem(Object *parent, byte subType, uint16 index, const Common::S
 		_meshIndex(-1),
 		_textureNormalIndex(-1),
 		_textureFaceIndex(-1),
-		_referencedItem(nullptr) {
+		_referencedItem(nullptr),
+		_animHandler(nullptr) {
 }
 
 void ModelItem::readData(Formats::XRCReadStream *stream) {
@@ -936,6 +942,8 @@ void ModelItem::onAllLoaded() {
 	if (_referencedItem) {
 		_referencedItem->setInstanciatedItem(this);
 	}
+
+	_animHandler = new AnimHandler();
 }
 
 void ModelItem::onEnterLocation() {
@@ -1083,11 +1091,11 @@ void ModelItem::printData() {
 }
 
 void ModelItem::resetAnimationBlending() {
-	Anim *anim = getAnim();
-	VisualActor *visual = anim->getVisual()->get<VisualActor>();
-	if (visual) {
-		visual->resetBlending();
-	}
+	_animHandler->resetBlending();
+}
+
+AnimHandler *ModelItem::getAnimHandler() const {
+	return _animHandler;
 }
 
 void ItemTemplate::onEnterLocation() {

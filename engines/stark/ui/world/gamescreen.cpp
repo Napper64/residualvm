@@ -96,6 +96,7 @@ void GameScreen::reset() {
 	_dialogPanel->reset();
 	_gameWindow->reset();
 	_inventoryWindow->reset();
+	_actionMenu->close();
 }
 
 GameWindow *GameScreen::getGameWindow() const {
@@ -136,6 +137,7 @@ void GameScreen::onScreenChanged() {
 	_dialogPanel->onScreenChanged();
 	_topMenu->onScreenChanged();
 	_gameWindow->onScreenChanged();
+	_actionMenu->onScreenChanged();
 }
 
 void GameScreen::notifyInventoryItemEnabled(uint16 itemIndex) {

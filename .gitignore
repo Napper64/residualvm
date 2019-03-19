@@ -3,6 +3,8 @@
 .*.swp
 .*.swo
 *.o
+*.dwo
+residualvm.dwp
 lib*.a
 .deps
 
@@ -21,6 +23,8 @@ lib*.a
 /MT32_PCM.ROM
 /ResidualVM.app
 /residualvm.docktileplugin
+/\!ResidualVM
+/*,e1f
 /residualvm-ps3.pkg
 /*.ipk
 /*.dmg

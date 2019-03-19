@@ -24,6 +24,7 @@
 #define STARK_H
 
 #include "engines/engine.h"
+#include "common/events.h"
 
 struct ADGameDescription;
 
@@ -78,35 +79,20 @@ private:
 	void updateDisplayScene();
 	void processEvents();
 	void onScreenChanged() const;
+	void addModsToSearchPath() const;
+	static void checkRecommendedDatafiles();
+	void tryAutoSaving();
 
-	Gfx::Driver *_gfx;
 	Gfx::FrameLimiter *_frameLimiter;
 	Console *_console;
 
-	// Services
-	ArchiveLoader *_archiveLoader;
-	DialogPlayer *_dialogPlayer;
-	Diary *_diary;
-	Global *_global;
-	GameInterface *_gameInterface;
-	StateProvider *_stateProvider;
-	StaticProvider *_staticProvider;
-	ResourceProvider *_resourceProvider;
-	FontProvider *_fontProvider;
-	Settings *_settings;
-	GameChapter *_gameChapter;
-	GameMessage *_gameMessage;
-
-	Common::RandomSource *_randomSource;
-
 	const ADGameDescription *_gameDescription;
-
-	UserInterface *_userInterface;
-	Scene *_scene;
 
 	// Double click handling
 	static const uint _doubleClickDelay = 500; // ms
 	uint _lastClickTime;
+
+	uint32 _lastAutoSaveTime;
 };
 
 } // End of namespace Stark

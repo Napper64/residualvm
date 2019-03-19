@@ -27,6 +27,7 @@
 
 #include "engines/stark/services/gamemessage.h"
 
+#include "common/keyboard.h"
 #include "common/rect.h"
 #include "common/str-array.h"
 #include "common/stack.h"
@@ -46,6 +47,7 @@ namespace Gfx {
 class Driver;
 }
 
+class DialogBox;
 class DiaryIndexScreen;
 class GameScreen;
 class MainMenuScreen;
@@ -101,10 +103,11 @@ public:
 	/** Back to the previous displayed screen */
 	void backPrevScreen();
 
+	/** Apply the scheduled screen change if any */
+	void doQueuedScreenChange();
+
 	/** Back to the main menu screen and rest resources */
 	void requestQuitToMainMenu() { _quitToMainMenu = true; }
-	bool hasQuitToMainMenuRequest() { return _quitToMainMenu; }
-	void performQuitToMainMenu();
 
 	/** Restore the screen travelling history to the initial state*/
 	void restoreScreenHistory();
@@ -161,43 +164,28 @@ public:
 	/** Get the currently stored game screen thumbnail, returns nullptr if there is not thumbnail stored */
 	const Graphics::Surface *getGameWindowThumbnail() const;
 
-	/** Display a message dialog, return true when the left button is pressed, and false for the right button */
-	bool confirm(const Common::String &msg, const Common::String &leftBtnMsg, const Common::String &rightBtnMsg);
-	bool confirm(const Common::String &msg);
-	bool confirm(GameMessage::TextKey key);
+	/**
+	 * Display a confirmation dialog
+	 *
+	 * Close the dialog when the cancel button is pressed,
+	 * call a callback when the confirm button is pressed.
+	 */
+	template<class T>
+	void confirm(const Common::String &message, T *instance, void (T::*confirmCallBack)());
+	template<class T>
+	void confirm(GameMessage::TextKey key, T *instance, void (T::*confirmCallBack)());
+	void confirm(const Common::String &message, Common::Functor0<void> *confirmCallBack);
+	void confirm(GameMessage::TextKey key, Common::Functor0<void> *confirmCallBack);
 
 	/** Directly open or close a screen */
 	void toggleScreen(Screen::Name screenName);
 
 	/** Toggle subtitles on and off */
-	void requestToggleSubtitle() { _shouldToggleSubtitle = !_shouldToggleSubtitle; }
 	bool hasToggleSubtitleRequest() { return _shouldToggleSubtitle; }
 	void performToggleSubtitle();
 
-	/** Cycle back or forward through inventory cursor items */
-	void cycleBackInventory() { cycleInventory(false); }
-	void cycleForwardInventory() { cycleInventory(true); }
-
-	/** Scroll the inventory up or down */
-	void scrollInventoryUp();
-	void scrollInventoryDown();
-
-	/** Scroll the dialog options up or down */
-	void scrollDialogUp();
-	void scrollDialogDown();
-
-	/** Focus on the next or previous dialog option */
-	void focusNextDialogOption();
-	void focusPrevDialogOption();
-
-	/** Select the focused dialog option */
-	void selectFocusedDialogOption();
-
-	/** Directly select a dialog option by index */
-	void selectDialogOptionByIndex(uint index);
-
-	/** Toggle the display of exit locations */
-	void toggleExitDisplay();
+	/** Perform an action after a keypress */
+	void handleKeyPress(const Common::KeyState &keyState);
 
 	static const uint kThumbnailWidth = 160;
 	static const uint kThumbnailHeight = 92;
@@ -221,8 +209,10 @@ private:
 	Screen *_currentScreen;
 	Common::Stack<Screen::Name> _prevScreenNameStack;
 
-	Gfx::Driver *_gfx;
+	DialogBox *_modalDialog;
 	Cursor *_cursor;
+
+	Gfx::Driver *_gfx;
 	bool _exitGame;
 	bool _quitToMainMenu;
 
@@ -231,8 +221,22 @@ private:
 
 	bool _shouldToggleSubtitle;
 
+	// TODO: Generalize to all screen changes
+	bool _shouldGoBackToPreviousScreen;
+	Common::String _shouldPlayFmv;
+
 	Graphics::Surface *_gameWindowThumbnail;
 };
+
+template<class T>
+void UserInterface::confirm(GameMessage::TextKey key, T *instance, void (T::*confirmCallBack)()) {
+	confirm(key, new Common::Functor0Mem<void, T>(instance, confirmCallBack));
+}
+
+template<class T>
+void UserInterface::confirm(const Common::String &message, T *instance, void (T::*confirmCallBack)()) {
+	confirm(message, new Common::Functor0Mem<void, T>(instance, confirmCallBack));
+}
 
 } // End of namespace Stark
 

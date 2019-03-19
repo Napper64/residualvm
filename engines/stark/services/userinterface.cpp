@@ -24,10 +24,13 @@
 #include "common/stream.h"
 #include "common/system.h"
 
+#include "engines/engine.h"
+
 #include "engines/stark/services/userinterface.h"
 
 #include "engines/stark/gfx/driver.h"
 
+#include "engines/stark/services/diary.h"
 #include "engines/stark/services/gameinterface.h"
 #include "engines/stark/services/global.h"
 #include "engines/stark/services/services.h"
@@ -36,6 +39,7 @@
 #include "engines/stark/services/settings.h"
 
 #include "engines/stark/ui/cursor.h"
+#include "engines/stark/ui/dialogbox.h"
 #include "engines/stark/ui/menu/diaryindex.h"
 #include "engines/stark/ui/menu/mainmenu.h"
 #include "engines/stark/ui/menu/settingsmenu.h"
@@ -70,18 +74,20 @@ UserInterface::UserInterface(Gfx::Driver *gfx) :
 		_exitGame(false),
 		_quitToMainMenu(false),
 		_shouldToggleSubtitle(false),
+		_shouldGoBackToPreviousScreen(false),
 		_fmvScreen(nullptr),
 		_gameScreen(nullptr),
 		_interactive(true),
 		_interactionAttemptDenied(false),
 		_currentScreen(nullptr),
 		_gameWindowThumbnail(nullptr),
-		_prevScreenNameStack() {
+		_modalDialog(nullptr) {
 }
 
 UserInterface::~UserInterface() {
 	freeGameScreenThumbnail();
 
+	delete _modalDialog;
 	delete _gameScreen;
 	delete _fmvScreen;
 	delete _diaryIndexScreen;
@@ -108,6 +114,7 @@ void UserInterface::init() {
 	_diaryPagesScreen = new DiaryPagesScreen(_gfx, _cursor);
 	_dialogScreen = new DialogScreen(_gfx, _cursor);
 	_fmvScreen = new FMVScreen(_gfx, _cursor);
+	_modalDialog = new DialogBox(_gfx, _cursor);
 
 	_prevScreenNameStack.push(Screen::kScreenMainMenu);
 	_currentScreen = _fmvScreen;
@@ -119,14 +126,19 @@ void UserInterface::init() {
 void UserInterface::onGameLoop() {
 	StarkStaticProvider->onGameLoop();
 
-	_currentScreen->handleGameLoop();
+	if (_modalDialog->isVisible()) {
+		_modalDialog->handleGameLoop();
+		_modalDialog->handleMouseMove();
+	} else {
+		_currentScreen->handleGameLoop();
 
-	// Check for UI mouse overs
-	// TODO: Call mouse move only if the mouse position actually changed
-	// probably some code will need to be moved to gameloop handling to
-	// account for the case where hotspots move and the mouse cursor needs
-	// to be updated regardless of the mouse actually moved.
-	_currentScreen->handleMouseMove();
+		// Check for UI mouse overs
+		// TODO: Call mouse move only if the mouse position actually changed
+		//  probably some code will need to be moved to gameloop handling to
+		//  account for the case where hotspots move and the mouse cursor needs
+		//  to be updated regardless of the mouse actually moved.
+		_currentScreen->handleMouseMove();
+	}
 }
 
 void UserInterface::handleMouseMove(const Common::Point &pos) {
@@ -135,35 +147,48 @@ void UserInterface::handleMouseMove(const Common::Point &pos) {
 
 void UserInterface::handleMouseUp() {
 	// Only the settings menu needs to handle this event
+	// TODO: Clean this up
 	_settingsMenuScreen->handleMouseUp();
 }
 
 void UserInterface::handleClick() {
-	_currentScreen->handleClick();
+	if (_modalDialog->isVisible()) {
+		_modalDialog->handleClick();
+	} else {
+		_currentScreen->handleClick();
+	}
 }
 
 void UserInterface::handleRightClick() {
-	_currentScreen->handleRightClick();
+	if (_modalDialog->isVisible()) {
+		_modalDialog->handleRightClick();
+	} else {
+		_currentScreen->handleRightClick();
+	}
 }
 
 void UserInterface::handleDoubleClick() {
-	_currentScreen->handleDoubleClick();
+	if (_modalDialog->isVisible()) {
+		_modalDialog->handleDoubleClick();
+	} else {
+		_currentScreen->handleDoubleClick();
+	}
 }
 
 void UserInterface::handleEscape() {
-	bool handled = false;
-
-	handled = StarkGameInterface->skipCurrentSpeeches();
-	if (!handled) {
-		handled = skipFMV();
+	if (StarkGameInterface->skipCurrentSpeeches()) {
+		return;
 	}
-	if (!handled) {
-		Screen::Name curScreenName = _currentScreen->getName();
-		if (curScreenName != Screen::kScreenGame && curScreenName != Screen::kScreenMainMenu) {
-			backPrevScreen();
-		} else if (StarkSettings->getBoolSetting(Settings::kTimeSkip)) {
-			StarkGlobal->setFastForward();
-		}
+
+	if (skipFMV()) {
+		return;
+	}
+
+	Screen::Name curScreenName = _currentScreen->getName();
+	if (curScreenName != Screen::kScreenGame && curScreenName != Screen::kScreenMainMenu) {
+		backPrevScreen();
+	} else if (StarkSettings->getBoolSetting(Settings::kTimeSkip)) {
+		StarkGlobal->setFastForward();
 	}
 }
 
@@ -189,13 +214,11 @@ void UserInterface::selectInventoryItem(int16 itemIndex) {
 }
 
 void UserInterface::requestFMVPlayback(const Common::String &name) {
-	changeScreen(Screen::kScreenFMV);
-
-	_fmvScreen->play(name);
+	_shouldPlayFmv = name;
 }
 
 void UserInterface::onFMVStopped() {
-	backPrevScreen();
+	_shouldGoBackToPreviousScreen = true;
 }
 
 void UserInterface::changeScreen(Screen::Name screenName) {
@@ -218,17 +241,8 @@ void UserInterface::backPrevScreen() {
 	_prevScreenNameStack.pop();
 }
 
-void UserInterface::performQuitToMainMenu() {
-	assert(_quitToMainMenu);
-
-	changeScreen(Screen::kScreenGame);
-	StarkResourceProvider->shutdown();
-	changeScreen(Screen::kScreenMainMenu);
-	_prevScreenNameStack.clear();
-	_quitToMainMenu = false;
-}
-
 void UserInterface::restoreScreenHistory() {
+	_shouldGoBackToPreviousScreen = false;
 	_prevScreenNameStack.clear();
 	_prevScreenNameStack.push(Screen::kScreenMainMenu);
 }
@@ -261,7 +275,7 @@ Screen *UserInterface::getScreenByName(Screen::Name screenName) const {
 }
 
 bool UserInterface::isInGameScreen() const {
-	return _currentScreen->getName() == Screen::kScreenGame;
+	return _currentScreen && (_currentScreen->getName() == Screen::kScreenGame);
 }
 
 bool UserInterface::isInSaveLoadMenuScreen() const {
@@ -287,6 +301,10 @@ bool UserInterface::skipFMV() {
 
 void UserInterface::render() {
 	_currentScreen->render();
+
+	if (_modalDialog->isVisible()) {
+		_modalDialog->render();
+	}
 
 	// The cursor depends on the UI being done.
 	if (_currentScreen->getName() != Screen::kScreenFMV) {
@@ -329,7 +347,7 @@ void UserInterface::optionsOpen() {
 void UserInterface::saveGameScreenThumbnail() {
 	freeGameScreenThumbnail();
 
-	if (StarkGlobal->getLevel()) {
+	if (StarkGlobal->getLevel() && StarkGlobal->getCurrent()) {
 		// Re-render the screen to exclude the cursor
 		StarkGfx->clearScreen();
 		_gameScreen->render();
@@ -372,6 +390,10 @@ const Graphics::Surface *UserInterface::getGameWindowThumbnail() const {
 void UserInterface::onScreenChanged() {
 	_gameScreen->onScreenChanged();
 
+	if (_modalDialog->isVisible()) {
+		_modalDialog->onScreenChanged();
+	}
+
 	if (!isInGameScreen()) {
 		_currentScreen->onScreenChanged();
 	}
@@ -383,24 +405,6 @@ void UserInterface::notifyInventoryItemEnabled(uint16 itemIndex) {
 
 void UserInterface::notifyDiaryEntryEnabled() {
 	_gameScreen->notifyDiaryEntryEnabled();
-}
-
-bool UserInterface::confirm(const Common::String &msg,
-		const Common::String &leftBtnMsg, const Common::String &rightBtnMsg) {
-	// TODO: Implement the original dialog
-	GUI::MessageDialog dialog(msg, leftBtnMsg.c_str(), rightBtnMsg.c_str());
-	return dialog.runModal() == GUI::kMessageOK;
-}
-
-bool UserInterface::confirm(const Common::String &msg) {
-	Common::String textYes = StarkGameMessage->getTextByKey(GameMessage::kYes);
-	Common::String textNo = StarkGameMessage->getTextByKey(GameMessage::kNo);
-	return confirm(msg, textYes, textNo);
-}
-
-bool UserInterface::confirm(GameMessage::TextKey key) {
-	Common::String msg = StarkGameMessage->getTextByKey(key);
-	return confirm(msg);
 }
 
 void UserInterface::toggleScreen(Screen::Name screenName) {
@@ -429,40 +433,148 @@ void UserInterface::cycleInventory(bool forward) {
 	selectInventoryItem(nextItem);
 }
 
-void UserInterface::scrollInventoryUp() {
-	_gameScreen->getInventoryWindow()->scrollUp();
+void UserInterface::doQueuedScreenChange() {
+	if (_quitToMainMenu) {
+		clearLocationDependentState();
+		changeScreen(Screen::kScreenGame);
+		StarkResourceProvider->shutdown();
+		changeScreen(Screen::kScreenMainMenu);
+		_prevScreenNameStack.clear();
+		_quitToMainMenu = false;
+	}
+
+	if (_shouldGoBackToPreviousScreen) {
+		backPrevScreen();
+		_shouldGoBackToPreviousScreen = false;
+	}
+
+	if (!_shouldPlayFmv.empty()) {
+		changeScreen(Screen::kScreenFMV);
+		_fmvScreen->play(_shouldPlayFmv);
+		_shouldPlayFmv.clear();
+	}
 }
 
-void UserInterface::scrollInventoryDown() {
-	_gameScreen->getInventoryWindow()->scrollDown();
+void UserInterface::handleKeyPress(const Common::KeyState &keyState) {
+	if (_modalDialog->isVisible()) {
+		_modalDialog->onKeyPress(keyState);
+		return;
+	}
+
+	// TODO: Delegate keypress handling to the screens
+
+	if (keyState.keycode == Common::KEYCODE_ESCAPE) {
+		handleEscape();
+	} else if ((keyState.keycode == Common::KEYCODE_RETURN
+				|| keyState.keycode == Common::KEYCODE_KP_ENTER)) {
+		if (isInGameScreen()) {
+			_gameScreen->getDialogPanel()->selectFocusedOption();
+		}
+	} else if (keyState.keycode == Common::KEYCODE_F1) {
+		toggleScreen(Screen::kScreenDiaryIndex);
+	} else if (keyState.keycode == Common::KEYCODE_F2) {
+		if (isInSaveLoadMenuScreen() || g_engine->canSaveGameStateCurrently()) {
+			toggleScreen(Screen::kScreenSaveMenu);
+		}
+	} else if (keyState.keycode == Common::KEYCODE_F3) {
+		toggleScreen(Screen::kScreenLoadMenu);
+	} else if (keyState.keycode == Common::KEYCODE_F4) {
+		toggleScreen(Screen::kScreenDialog);
+	} else if (keyState.keycode == Common::KEYCODE_F5) {
+		if (StarkDiary->isEnabled()) {
+			toggleScreen(Screen::kScreenDiaryPages);
+		}
+	} else if (keyState.keycode == Common::KEYCODE_F6) {
+		toggleScreen(Screen::kScreenFMVMenu);
+	} else if (keyState.keycode == Common::KEYCODE_F7) {
+		toggleScreen(Screen::kScreenSettingsMenu);
+	} else if (keyState.keycode == Common::KEYCODE_F8) {
+		g_system->saveScreenshot();
+	} else if (keyState.keycode == Common::KEYCODE_F9) {
+		if (isInGameScreen()) {
+			_shouldToggleSubtitle = !_shouldToggleSubtitle;
+		}
+	} else if (keyState.keycode == Common::KEYCODE_F10) {
+		if (isInGameScreen() || isInDiaryIndexScreen()) {
+			confirm(GameMessage::kQuitGamePrompt, this, &UserInterface::requestQuitToMainMenu);
+		}
+	} else if (keyState.keycode == Common::KEYCODE_a) {
+		if (isInGameScreen() && isInteractive()) {
+			cycleInventory(false);
+		}
+	} else if (keyState.keycode == Common::KEYCODE_s) {
+		if (isInGameScreen() && isInteractive()) {
+			cycleInventory(true);
+		}
+	} else if (keyState.keycode == Common::KEYCODE_i) {
+		if (isInGameScreen() && isInteractive()) {
+			inventoryOpen(!isInventoryOpen());
+		}
+	} else if (keyState.keycode == Common::KEYCODE_x
+				&& !keyState.hasFlags(Common::KBD_ALT)) {
+		if (isInGameScreen() && isInteractive()) {
+			_gameScreen->getGameWindow()->toggleExitDisplay();
+		}
+	} else if ((keyState.keycode == Common::KEYCODE_x
+				|| keyState.keycode == Common::KEYCODE_q)
+				&& keyState.hasFlags(Common::KBD_ALT)) {
+		confirm(GameMessage::kQuitPrompt, this, &UserInterface::notifyShouldExit);
+	} else if (keyState.keycode == Common::KEYCODE_p) {
+		if (isInGameScreen()) {
+			g_engine->pauseEngine(true);
+			debug("The game is paused");
+		}
+	} else if (keyState.keycode == Common::KEYCODE_PAGEUP) {
+		if (isInGameScreen()) {
+			if (isInventoryOpen()) {
+				_gameScreen->getInventoryWindow()->scrollUp();
+			} else {
+				_gameScreen->getDialogPanel()->scrollUp();
+			}
+		}
+	} else if (keyState.keycode == Common::KEYCODE_UP) {
+		if (isInGameScreen()) {
+			if (isInventoryOpen()) {
+				_gameScreen->getInventoryWindow()->scrollUp();
+			} else {
+				_gameScreen->getDialogPanel()->focusPrevOption();
+			}
+		}
+	} else if (keyState.keycode == Common::KEYCODE_PAGEDOWN) {
+		if (isInGameScreen()) {
+			if (isInventoryOpen()) {
+				_gameScreen->getInventoryWindow()->scrollDown();
+			} else {
+				_gameScreen->getDialogPanel()->scrollDown();
+			}
+		}
+	} else if (keyState.keycode == Common::KEYCODE_DOWN) {
+		if (isInGameScreen()) {
+			if (isInventoryOpen()) {
+				_gameScreen->getInventoryWindow()->scrollDown();
+			} else {
+				_gameScreen->getDialogPanel()->focusNextOption();
+			}
+		}
+	} else if (keyState.keycode >= Common::KEYCODE_1 && keyState.keycode <= Common::KEYCODE_9) {
+		if (isInGameScreen()) {
+			uint index = keyState.keycode - Common::KEYCODE_1;
+			_gameScreen->getDialogPanel()->selectOption(index);
+		}
+	}
 }
 
-void UserInterface::scrollDialogUp() {
-	_gameScreen->getDialogPanel()->scrollUp();
+void UserInterface::confirm(const Common::String &message, Common::Functor0<void> *confirmCallBack) {
+	Common::String textYes = StarkGameMessage->getTextByKey(GameMessage::kYes);
+	Common::String textNo = StarkGameMessage->getTextByKey(GameMessage::kNo);
+
+	_modalDialog->open(message, confirmCallBack, textYes, textNo);
 }
 
-void UserInterface::scrollDialogDown() {
-	_gameScreen->getDialogPanel()->scrollDown();
-}
+void UserInterface::confirm(GameMessage::TextKey key, Common::Functor0<void> *confirmCallBack) {
+	Common::String message = StarkGameMessage->getTextByKey(key);
 
-void UserInterface::focusNextDialogOption() {
-	_gameScreen->getDialogPanel()->focusNextOption();
-}
-
-void UserInterface::focusPrevDialogOption() {
-	_gameScreen->getDialogPanel()->focusPrevOption();
-}
-
-void UserInterface::selectFocusedDialogOption() {
-	_gameScreen->getDialogPanel()->selectFocusedOption();
-}
-
-void UserInterface::selectDialogOptionByIndex(uint index) {
-	_gameScreen->getDialogPanel()->selectOption(index);
-}
-
-void UserInterface::toggleExitDisplay() {
-	_gameScreen->getGameWindow()->toggleExitDisplay();
+	confirm(message, confirmCallBack);
 }
 
 } // End of namespace Stark

@@ -38,16 +38,18 @@ namespace Formats {
 class XMGDecoder {
 public:
 	static Graphics::Surface *decode(Common::ReadStream *stream);
+	static void readSize(Common::ReadStream *stream, uint &width, uint &height);
 
 private:
-	XMGDecoder();
+	explicit XMGDecoder(Common::ReadStream *stream);
 
 	struct Block {
 		uint32 a1, a2;
 		uint32 b1, b2;
 	};
 
-	Graphics::Surface *decodeImage(Common::ReadStream *stream);
+	void readHeader();
+	Graphics::Surface *decodeImage();
 	Block decodeBlock(byte op);
 	void drawBlock(const Block &block, Graphics::Surface *surface);
 
@@ -63,6 +65,11 @@ private:
 
 	Common::ReadStream *_stream;
 
+	/**
+	 * The transparency color in the RGB and transparency blocks.
+	 * In the output surface, the transparent color is black with zero
+	 * alpha. So the images are effectively pre-multiplied alpha.
+	 */
 	uint32 _transColor;
 };
 

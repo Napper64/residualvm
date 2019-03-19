@@ -27,10 +27,12 @@
 #include "common/str.h"
 
 #include "engines/stark/resources/object.h"
+#include "engines/stark/visual/text.h"
 
 namespace Stark {
 
 class Visual;
+class VisualImageXMG;
 namespace Formats {
 class XRCReadStream;
 }
@@ -109,6 +111,8 @@ protected:
 	// Image API
 	void initVisual() override;
 
+	bool loadPNGOverride(Stark::VisualImageXMG *visual) const;
+
 	bool _noName;
 };
 
@@ -132,7 +136,7 @@ protected:
 
 	Common::Point _size;
 	Common::String _text;
-	uint32 _color;
+	Color _color;
 	uint32 _font;
 };
 

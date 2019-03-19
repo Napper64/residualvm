@@ -59,10 +59,6 @@ void VisualActor::setAnimHandler(AnimHandler *animHandler) {
 	_animHandler = animHandler;
 }
 
-void VisualActor::setAnim(SkeletonAnim *anim) {
-	_animHandler->setAnim(anim);
-}
-
 void VisualActor::setTexture(Gfx::TextureSet *texture) {
 	_textureSet = texture;
 }
@@ -97,7 +93,7 @@ void VisualActor::setTime(uint32 time) {
 	_time = time;
 }
 
-Math::Matrix4 VisualActor::getModelMatrix(const Math::Vector3d &position, float direction) {
+Math::Matrix4 VisualActor::getModelMatrix(const Math::Vector3d &position, float direction) const {
 	Math::Matrix4 modelMatrix;
 	modelMatrix.setPosition(position);
 
@@ -137,10 +133,50 @@ bool VisualActor::intersectRay(const Math::Ray &ray, const Math::Vector3d &posit
 	return _model->intersectRay(localRay);
 }
 
-void VisualActor::resetBlending() {
-	if (_animHandler) {
-		_animHandler->resetBlending();
+Common::Rect VisualActor::getBoundingRect(const Math::Vector3d &position3d, float direction) const {
+	Math::Matrix4 modelMatrix = getModelMatrix(position3d, direction);
+
+	Math::AABB modelSpaceBB = _model->getBoundingBox();
+	Math::Vector3d min = modelSpaceBB.getMin();
+	Math::Vector3d max = modelSpaceBB.getMax();
+
+	Math::Vector3d verts[8];
+	verts[0].set(min.x(), min.y(), min.z());
+	verts[1].set(max.x(), min.y(), min.z());
+	verts[2].set(min.x(), max.y(), min.z());
+	verts[3].set(min.x(), min.y(), max.z());
+	verts[4].set(max.x(), max.y(), min.z());
+	verts[5].set(max.x(), min.y(), max.z());
+	verts[6].set(min.x(), max.y(), max.z());
+	verts[7].set(max.x(), max.y(), max.z());
+
+	Common::Rect boundingRect;
+	for (int i = 0; i < 8; ++i) {
+		modelMatrix.transform(&verts[i], true);
+		Common::Point point = StarkScene->convertPosition3DToGameScreenOriginal(verts[i]);
+
+		if (i == 0) {
+			boundingRect.top = point.y;
+			boundingRect.bottom = point.y;
+			boundingRect.left = point.x;
+			boundingRect.right = point.x;
+		} else {
+			if (boundingRect.left > point.x) {
+				boundingRect.left = point.x;
+			}
+			if (boundingRect.right < point.x) {
+				boundingRect.right = point.x;
+			}
+			if (boundingRect.top > point.y) {
+				boundingRect.top = point.y;
+			}
+			if (boundingRect.bottom < point.y) {
+				boundingRect.bottom = point.y;
+			}
+		}
 	}
+
+	return boundingRect;
 }
 
 } // End of namespace Stark

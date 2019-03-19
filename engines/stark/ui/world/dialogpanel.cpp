@@ -40,6 +40,9 @@
 
 namespace Stark {
 
+const Color DialogPanel::_aprilColor = Color(0xFF, 0xC0, 0x00);
+const Color DialogPanel::_otherColor = Color(0xFF, 0x40, 0x40);
+
 DialogPanel::DialogPanel(Gfx::Driver *gfx, Cursor *cursor) :
 		Window(gfx, cursor),
 		_subtitleVisual(nullptr),
@@ -149,22 +152,23 @@ void DialogPanel::onRender() {
 	// Draw options if available
 	if (!_options.empty()) {
 		_activeBackGroundTexture->render(Common::Point(0, 0), false);
+
 		renderOptions();
 		renderScrollArrows();
 	} else {
 		_passiveBackGroundTexture->render(Common::Point(0, 0), false);
-	}
 
-	// Draw subtitle if available
-	if (_subtitleVisual && StarkSettings->getBoolSetting(Settings::kSubtitle)) {
-		_subtitleVisual->render(Common::Point(_optionsLeft, _optionsTop));
+		// Draw subtitle if available
+		if (_subtitleVisual && StarkSettings->getBoolSetting(Settings::kSubtitle)) {
+			_subtitleVisual->render(Common::Point(_optionsLeft, _optionsTop));
+		}
 	}
 }
 
 void DialogPanel::updateSubtitleVisual() {
 	clearSubtitleVisual();
 
-	uint32 color = _otherColor;
+	Color color = _otherColor;
 	if (_currentSpeech->characterIsApril())
 		color = _aprilColor;
 

@@ -65,7 +65,7 @@ void RenderEntry::render(const LightEntryArray &lights) {
 
 	VisualProp *prop = _visual->get<VisualProp>();
 	if (prop) {
-		prop->render(_position3D, _direction3D);
+		prop->render(_position3D, _direction3D, lights);
 	}
 
 	VisualSmacker *smacker = _visual->get<VisualSmacker>();
@@ -127,7 +127,7 @@ bool RenderEntry::compare(const RenderEntry *x, const RenderEntry *y) {
 	}
 }
 
-bool RenderEntry::containsPoint(const Common::Point &position, Common::Point &relativePosition) const {
+bool RenderEntry::containsPoint(const Common::Point &position, Common::Point &relativePosition, const Common::Rect &cursorRect) const {
 	if (!_visual || !_clickable) {
 		return false;
 	}
@@ -138,9 +138,19 @@ bool RenderEntry::containsPoint(const Common::Point &position, Common::Point &re
 		imageRect.translate(_position.x, _position.y);
 		imageRect.translate(-image->getHotspot().x, -image->getHotspot().y);
 
-		relativePosition.x = position.x - imageRect.left - image->getHotspot().x;
-		relativePosition.y = position.y - imageRect.top - image->getHotspot().y;
+		relativePosition.x = position.x - imageRect.left;
+		relativePosition.y = position.y - imageRect.top;
 		if (imageRect.contains(position) && image->isPointSolid(relativePosition)) {
+			return true;
+		}
+
+		if (imageRect.width() < 32 && imageRect.height() < 32
+				&& !cursorRect.isEmpty() && cursorRect.intersects(imageRect)) {
+			// If the item in the scene is way smaller than the cursor,
+			// use the whole cursor as a hit rectangle.
+			relativePosition.x = 1 - image->getHotspot().x;
+			relativePosition.y = 1 - image->getHotspot().y;
+
 			return true;
 		}
 	}
@@ -205,6 +215,20 @@ VisualText *RenderEntry::getText() const {
 		return nullptr;
 	}
 	return _visual->get<VisualText>();
+}
+
+Common::Rect RenderEntry::getBoundingRect() const {
+	if (!_visual) {
+		return Common::Rect();
+	}
+
+	VisualActor *actor = _visual->get<VisualActor>();
+	if (actor) {
+		return actor->getBoundingRect(_position3D, _direction3D);
+	}
+
+	warning("RenderEntry::getBoundingRect is not implemented for '%s'", _name.c_str());
+	return Common::Rect();
 }
 
 } // End of namespace Gfx

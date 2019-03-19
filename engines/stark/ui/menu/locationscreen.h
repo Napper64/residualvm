@@ -25,6 +25,7 @@
 
 #include "engines/stark/ui/screen.h"
 #include "engines/stark/ui/window.h"
+#include "engines/stark/visual/text.h"
 
 namespace Stark {
 
@@ -46,12 +47,21 @@ class StaticLocationWidget;
 class StaticLocationScreen : public SingleWindowScreen {
 public:
 	StaticLocationScreen(Gfx::Driver *gfx, Cursor *cursor, const char *locationName, Screen::Name screenName);
-	virtual ~StaticLocationScreen();
+	~StaticLocationScreen() override;
 
 	// Screen API
 	void open() override;
 	void close() override;
 	void onScreenChanged() override;
+
+	/**
+	 * Wait for all effect sounds to complete
+	 *
+	 * Used to ensure the button press sounds are no longer
+	 * playing before performing the next action that
+	 * would produce a sound.
+	 */
+	void waitForSoundsToComplete();
 
 protected:
 	// Window API
@@ -112,7 +122,7 @@ public:
 	 *
 	 * Only applies for widget referring to a RenderEntry for a text visual
 	 */
-	void setTextColor(uint32 textColor);
+	void setTextColor(const Color &textColor);
 
 	/** Widgets must be visible to be rendered and interactive */
 	bool isVisible() const;

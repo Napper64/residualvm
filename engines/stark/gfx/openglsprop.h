@@ -23,11 +23,13 @@
 #ifndef STARK_GFX_OPENGL_S_RENDERED_H
 #define STARK_GFX_OPENGL_S_RENDERED_H
 
+#include "engines/stark/model/model.h"
+#include "engines/stark/visual/prop.h"
+
 #include "common/hashmap.h"
 #include "common/hash-ptr.h"
 
-#include "engines/stark/model/model.h"
-#include "engines/stark/visual/prop.h"
+#include "graphics/opengl/system_headers.h"
 
 namespace OpenGL {
 	class Shader;
@@ -41,24 +43,28 @@ class Driver;
 
 class OpenGLSPropRenderer : public VisualProp {
 public:
-	OpenGLSPropRenderer(Driver *gfx);
-	virtual ~OpenGLSPropRenderer();
+	explicit OpenGLSPropRenderer(Driver *gfx);
+	~OpenGLSPropRenderer() override;
 
-	void render(const Math::Vector3d position, float direction) override;
+	void render(const Math::Vector3d &position, float direction, const LightEntryArray &lights) override;
 
 protected:
-	typedef Common::HashMap<const Face *, uint32> FaceBufferMap;
+	typedef Common::HashMap<const Face *, GLuint> FaceBufferMap;
 
 	Driver *_gfx;
 	OpenGL::Shader *_shader;
 
-	int32 _faceVBO;
+	bool _modelIsDirty;
+	GLuint _faceVBO;
 	FaceBufferMap _faceEBO;
 
 	void clearVertices();
 	void uploadVertices();
-	uint32 createFaceVBO();
-	uint32 createFaceEBO(const Face *face);
+	GLuint createFaceVBO();
+	GLuint createFaceEBO(const Face *face);
+
+	void setLightArrayUniform(const LightEntryArray &lights);
+
 };
 
 } // End of namespace Gfx

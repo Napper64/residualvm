@@ -23,9 +23,12 @@
 #include "engines/stark/resources/image.h"
 
 #include "common/debug.h"
+#include "image/png.h"
 
+#include "engines/stark/debug.h"
 #include "engines/stark/formats/xrc.h"
 #include "engines/stark/services/archiveloader.h"
+#include "engines/stark/services/settings.h"
 #include "engines/stark/services/services.h"
 #include "engines/stark/visual/effects/bubbles.h"
 #include "engines/stark/visual/effects/fireflies.h"
@@ -208,15 +211,48 @@ void ImageStill::initVisual() {
 		return; // No file to load
 	}
 
-	Common::ReadStream *stream = StarkArchiveLoader->getFile(_filename, _archiveName);
+	Common::ReadStream *xmgStream = StarkArchiveLoader->getFile(_filename, _archiveName);
 
-	VisualImageXMG *xmg = new VisualImageXMG(StarkGfx);
-	xmg->load(stream);
-	xmg->setHotSpot(_hotspot);
+	VisualImageXMG *visual = new VisualImageXMG(StarkGfx);
 
-	_visual = xmg;
+	if (StarkSettings->isAssetsModEnabled() && loadPNGOverride(visual)) {
+		visual->readOriginalSize(xmgStream);
+	} else {
+		visual->load(xmgStream);
+	}
 
-	delete stream;
+	visual->setHotSpot(_hotspot);
+
+	_visual = visual;
+
+	delete xmgStream;
+}
+
+bool ImageStill::loadPNGOverride(VisualImageXMG *visual) const {
+	if (!_filename.hasSuffixIgnoreCase(".xmg")) {
+		return false;
+	}
+
+	Common::String pngFilename = Common::String(_filename.c_str(), _filename.size() - 4) + ".png";
+	Common::String pngFilePath = StarkArchiveLoader->getExternalFilePath(pngFilename, _archiveName);
+
+	debugC(kDebugModding, "Attempting to load %s", pngFilePath.c_str());
+
+	Common::SeekableReadStream *pngStream = SearchMan.createReadStreamForMember(pngFilePath);
+	if (!pngStream) {
+		return false;
+	}
+
+	if (!visual->loadPNG(pngStream)) {
+		warning("Failed to load %s. It is not a valid PNG file.", pngFilePath.c_str());
+		delete pngStream;
+		return false;
+	}
+
+	debugC(kDebugModding, "Loaded %s", pngFilePath.c_str());
+
+	delete pngStream;
+	return true;
 }
 
 void ImageStill::printData() {
@@ -225,7 +261,7 @@ void ImageStill::printData() {
 
 ImageText::ImageText(Object *parent, byte subType, uint16 index, const Common::String &name) :
 		Image(parent, subType, index, name),
-		_color(0),
+		_color(Color(0, 0, 0)),
 		_font(0) {
 }
 
@@ -237,7 +273,10 @@ void ImageText::readData(Formats::XRCReadStream *stream) {
 
 	_size = stream->readPoint();
 	_text = stream->readString();
-	_color = stream->readUint32LE();
+	_color.r = stream->readByte();
+	_color.g = stream->readByte();
+	_color.b = stream->readByte();
+	_color.a = stream->readByte() | 0xFF;
 	_font = stream->readUint32LE();
 }
 
@@ -263,7 +302,7 @@ void ImageText::initVisual() {
 	} else {
 		VisualText *text = new VisualText(StarkGfx);
 		text->setText(_text);
-		text->setColor(_color | 0xFF000000);
+		text->setColor(_color);
 		text->setTargetWidth(_size.x);
 		text->setTargetHeight(_size.y);
 		text->setFont(FontProvider::kCustomFont, _font);
@@ -276,7 +315,7 @@ void ImageText::printData() {
 
 	debug("size: x %d, y %d", _size.x, _size.y);
 	debug("text: %s", _text.c_str());
-	debug("color: %d", _color);
+	debug("color: (%d, %d, %d, %d)", _color.r, _color.g, _color.b, _color.a);
 	debug("font: %d", _font);
 }
 

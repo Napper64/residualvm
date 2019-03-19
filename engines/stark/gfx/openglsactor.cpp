@@ -58,7 +58,9 @@ void OpenGLSActorRenderer::render(const Math::Vector3d &position, float directio
 		_modelIsDirty = false;
 	}
 
+	// TODO: Move updates outside of the rendering code
 	_animHandler->animate(_time);
+	_model->updateBoundingBox();
 
 	_gfx->set3DMode();
 
@@ -171,7 +173,7 @@ void OpenGLSActorRenderer::uploadVertices() {
 	}
 }
 
-uint32 OpenGLSActorRenderer::createModelVBO(const Model *model) {
+GLuint OpenGLSActorRenderer::createModelVBO(const Model *model) {
 	const Common::Array<VertNode *> &modelVertices = model->getVertices();
 
 	float *vertices = new float[14 * modelVertices.size()];
@@ -200,13 +202,13 @@ uint32 OpenGLSActorRenderer::createModelVBO(const Model *model) {
 		*vertPtr++ = (*tri)->_texT;
 	}
 
-	uint32 vbo = OpenGL::Shader::createBuffer(GL_ARRAY_BUFFER, sizeof(float) * 14 * modelVertices.size(), vertices);
+	GLuint vbo = OpenGL::Shader::createBuffer(GL_ARRAY_BUFFER, sizeof(float) * 14 * modelVertices.size(), vertices);
 	delete[] vertices;
 
 	return vbo;
 }
 
-uint32 OpenGLSActorRenderer::createFaceEBO(const Face *face) {
+GLuint OpenGLSActorRenderer::createFaceEBO(const Face *face) {
 	return OpenGL::Shader::createBuffer(GL_ELEMENT_ARRAY_BUFFER, sizeof(uint32) * face->vertexIndices.size(), &face->vertexIndices[0]);
 }
 

@@ -71,8 +71,6 @@ protected:
 	};
 
 private:
-	static const uint32 _textColorBlack = 0xFF000000;
-
 	// Start from zero
 	static const int _maxPage = 10;
 
@@ -94,7 +92,8 @@ private:
 class SaveMenuScreen : public SaveLoadMenuScreen {
 public:
 	SaveMenuScreen(Gfx::Driver *gfx, Cursor *cursor) : 
-			SaveLoadMenuScreen(gfx, cursor, Screen::kScreenSaveMenu) {}
+			SaveLoadMenuScreen(gfx, cursor, Screen::kScreenSaveMenu),
+			_slotToSaveAfterConfirm(nullptr) {}
 	virtual ~SaveMenuScreen() {}
 
 	// SaveLoadMenuScreen API
@@ -103,6 +102,12 @@ public:
 	void onWidgetSelected(SaveDataWidget *widget) override;
 
 	bool isSaveMenu() override { return true; }
+
+private:
+	void saveGameToSlot(SaveDataWidget *widget);
+	void saveConfirmSlot();
+
+	SaveDataWidget *_slotToSaveAfterConfirm;
 };
 
 /**
@@ -111,8 +116,9 @@ public:
 class LoadMenuScreen : public SaveLoadMenuScreen {
 public:
 	LoadMenuScreen(Gfx::Driver *gfx, Cursor *cursor) : 
-			SaveLoadMenuScreen(gfx, cursor, Screen::kScreenLoadMenu) {}
-	virtual ~LoadMenuScreen() {}
+			SaveLoadMenuScreen(gfx, cursor, Screen::kScreenLoadMenu),
+			_slotToLoadAfterConfirm(-1) {}
+	~LoadMenuScreen() override {}
 
 	// SaveLoadMenuScreen API
 	void open() override;
@@ -120,6 +126,11 @@ public:
 	void onWidgetSelected(SaveDataWidget *widget) override;
 
 	bool isSaveMenu() override { return false; }
+
+private:
+	void loadConfirmSlot();
+
+	int _slotToLoadAfterConfirm;
 };
 
 /**
@@ -147,8 +158,8 @@ public:
 	bool hasSave() { return _hasSave; }
 
 private:
-	static const uint32 _outlineColor = 0xFF961E1E;
-	static const uint32 _textColor = 0xFF3D485C;
+	static const Color _outlineColor;
+	static const Color _textColor;
 
 	int _slot;
 	SaveLoadMenuScreen *_screen;

@@ -453,6 +453,14 @@ Math::Vector3d Command::getObjectPosition(const ResourceReference &targetRef, in
 
 			break;
 		}
+		case Type::kPath: {
+			assert(target->getSubType() == Path::kPath3D);
+
+			Path3D *path = Object::cast<Path3D>(target);
+			position = path->getVertexPosition3D(0, floorFace);
+
+			break;
+		}
 		default:
 			warning("Unimplemented getObjectPosition target type %s", target->getType().getName());
 	}
@@ -605,7 +613,8 @@ Command *Command::opItemSetActivity(Script *script, const ResourceReference &ite
 	Anim *actionAnim = sceneItem->getActionAnim();
 
 	if (wait && actionAnim) {
-		script->pause(actionAnim->getRemainingTime());
+		assert(actionAnim->getSubType() == Anim::kAnimSkeleton || actionAnim->getSubType() == Anim::kAnimVideo);
+		script->suspend(actionAnim);
 		return this;
 	} else {
 		resumeItemSetActivity();
@@ -651,11 +660,9 @@ Command *Command::opPlayAnimation(Script *script, const ResourceReference &animR
 	sceneItem->setMovement(nullptr);
 	sceneItem->playActionAnim(anim);
 
-	// TODO: Check if the anim should reset the anim hirarchy upon completion
-
 	if (suspend) {
-		uint32 animDuration = anim->getDuration();
-		script->pause(animDuration);
+		anim->shouldResetItem(false); // The script system will take care of that when resuming
+		script->suspend(anim);
 		return this; // Stay on the same command while suspended
 	} else {
 		return nextCommand();
@@ -686,12 +693,12 @@ Command *Command::opScriptEnable(const ResourceReference &scriptRef, int32 enabl
 }
 
 Command *Command::opShowPlay(Script *script, const ResourceReference &ref, int32 suspend) {
-	assert(_arguments.size() == 3);
 	Speech *speech = ref.resolve<Speech>();
-	warning("(TODO: Implement) opShowPlay(%s %d) %s : %s", speech->getName().c_str(), suspend, speech->getPhrase().c_str(), ref.describe().c_str());
-
 	speech->setPlayTalkAnim(true);
+
 	StarkDialogPlayer->playSingle(speech);
+
+	// TODO: Only set the anim activity if the next opcode is not going to do it
 
 	if (suspend) {
 		script->suspend(speech);
@@ -783,8 +790,7 @@ Command *Command::opPlayAnimScriptItem(Script *script, const ResourceReference &
 	animScript->goToScriptItem(animScriptItem);
 
 	if (suspend) {
-		uint32 duration = animScript->getDurationStartingWithItem(animScriptItem);
-		script->pause(duration);
+		script->suspend(anim);
 		return this; // Stay on the same command while suspended
 	} else {
 		return nextCommand();
@@ -949,9 +955,6 @@ Command *Command::opLocationScrollSet(const ResourceReference &scrollRef) {
 }
 
 Command *Command::opFullMotionVideoPlay(Script *script, const ResourceReference &movieRef, int32 unknown) {
-	FMV *movie =  movieRef.resolve<FMV>();
-	warning("(TODO: Implement) opFullMotionVideoPlay(%s) : %s - %d", movie->getName().c_str(), movieRef.describe().c_str(), unknown);
-
 	// Stop skipping frames
 	StarkGlobal->setNormalSpeed();
 
@@ -960,6 +963,7 @@ Command *Command::opFullMotionVideoPlay(Script *script, const ResourceReference 
 	Location *location = current->getLocation();
 	location->resetAnimationBlending();
 
+	FMV *movie =  movieRef.resolve<FMV>();
 	movie->requestPlayback();
 
 	// Unconditional suspension
@@ -1160,12 +1164,9 @@ Command *Command::opItem3DSetWalkTarget(const ResourceReference &itemRef, const 
 }
 
 Command *Command::opSpeakWithoutTalking(Script *script, const ResourceReference &speechRef, int32 suspend) {
-	assert(_arguments.size() == 3);
 	Speech *speech = speechRef.resolve<Speech>();
-	warning("(TODO: Implement) opSpeakWithoutTalking(%s, %d) : %s", speech->getName().c_str(), suspend, speechRef.describe().c_str());
-
-	// TODO: Complete
 	speech->setPlayTalkAnim(false);
+
 	StarkDialogPlayer->playSingle(speech);
 
 	if (suspend) {

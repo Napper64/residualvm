@@ -23,11 +23,14 @@
 #include "engines/stark/visual/image.h"
 
 #include "graphics/surface.h"
+#include "image/png.h"
 
 #include "engines/stark/formats/xmg.h"
 #include "engines/stark/gfx/driver.h"
 #include "engines/stark/gfx/surfacerenderer.h"
 #include "engines/stark/gfx/texture.h"
+#include "engines/stark/services/services.h"
+#include "engines/stark/services/settings.h"
 
 namespace Stark {
 
@@ -35,7 +38,9 @@ VisualImageXMG::VisualImageXMG(Gfx::Driver *gfx) :
 		Visual(TYPE),
 		_gfx(gfx),
 		_texture(nullptr),
-		_surface(nullptr) {
+		_surface(nullptr),
+		_originalWidth(0),
+		_originalHeight(0) {
 	_surfaceRenderer = _gfx->createSurfaceRenderer();
 }
 
@@ -58,6 +63,69 @@ void VisualImageXMG::load(Common::ReadStream *stream) {
 	// Decode the XMG
 	_surface = Formats::XMGDecoder::decode(stream);
 	_texture = _gfx->createTexture(_surface);
+	_texture->setSamplingFilter(StarkSettings->getImageSamplingFilter());
+
+	_originalWidth  = _surface->w;
+	_originalHeight = _surface->h;
+}
+
+void VisualImageXMG::readOriginalSize(Common::ReadStream *stream) {
+	Formats::XMGDecoder::readSize(stream, _originalWidth, _originalHeight);
+}
+
+bool VisualImageXMG::loadPNG(Common::SeekableReadStream *stream) {
+	assert(!_surface && !_texture);
+
+	// Decode the XMG
+	Image::PNGDecoder pngDecoder;
+	if (!pngDecoder.loadStream(*stream)) {
+		return false;
+	}
+
+	if (pngDecoder.getPalette()) {
+		warning("Indexed colors PNG images are not supported");
+		return false;
+	}
+
+	if (StarkSettings->shouldPreMultiplyReplacementPNGs()) {
+		// We can do alpha pre-multiplication when loading for
+		// convenience when testing modded graphics.
+		_surface = multiplyColorWithAlpha(pngDecoder.getSurface());
+	} else {
+		_surface = pngDecoder.getSurface()->convertTo(Gfx::Driver::getRGBAPixelFormat());
+	}
+
+	_texture = _gfx->createTexture(_surface);
+	_texture->setSamplingFilter(StarkSettings->getImageSamplingFilter());
+
+	return true;
+}
+
+Graphics::Surface *VisualImageXMG::multiplyColorWithAlpha(const Graphics::Surface *source) {
+	assert(source->format.bytesPerPixel == 4);
+
+	Graphics::Surface *dest = new Graphics::Surface();
+	dest->create(source->w, source->h, Gfx::Driver::getRGBAPixelFormat());
+
+	for (uint y = 0; y < source->h; y++) {
+		const uint32 *srcPixel = (const uint32 *) source->getBasePtr(0, y);
+		uint32 *dstPixel = (uint32 *) dest->getBasePtr(0, y);
+
+		for (uint x = 0; x < source->w; x++) {
+			byte a, r, g, b;
+			source->format.colorToARGB(*srcPixel++, a, r, g, b);
+
+			if (a != 0xFF) {
+				r = (int) r * a / 255;
+				g = (int) g * a / 255;
+				b = (int) b * a / 255;
+			}
+
+			*dstPixel++ = dest->format.ARGBToColor(a, r, g, b);
+		}
+	}
+
+	return dest;
 }
 
 void VisualImageXMG::render(const Common::Point &position, bool useOffset) {
@@ -68,11 +136,11 @@ void VisualImageXMG::render(const Common::Point &position, bool useOffset, bool 
 	Common::Point drawPos = useOffset ? position - _hotspot : position;
 
 	if (!unscaled) {
-		uint width = _gfx->scaleWidthOriginalToCurrent(_texture->width());
-		uint height = _gfx->scaleHeightOriginalToCurrent(_texture->height());
+		uint width = _gfx->scaleWidthOriginalToCurrent(_originalWidth);
+		uint height = _gfx->scaleHeightOriginalToCurrent(_originalHeight);
 		_surfaceRenderer->render(_texture, drawPos, width, height);
 	} else {
-		_surfaceRenderer->render(_texture, drawPos);
+		_surfaceRenderer->render(_texture, drawPos, _originalWidth, _originalHeight);
 	}
 }
 
@@ -83,23 +151,27 @@ void VisualImageXMG::setFadeLevel(float fadeLevel) {
 bool VisualImageXMG::isPointSolid(const Common::Point &point) const {
 	assert(_surface);
 
-	if (_surface->w < 32 || _surface->h < 32) {
+	if (_originalWidth < 32 || _originalHeight < 32) {
 		return true; // Small images are always solid
 	}
 
+	Common::Point scaledPoint;
+	scaledPoint.x = point.x * _surface->w / _originalWidth;
+	scaledPoint.y = point.y * _surface->h / _originalHeight;
+	scaledPoint.x = CLIP<uint16>(scaledPoint.x, 0, _surface->w);
+	scaledPoint.y = CLIP<uint16>(scaledPoint.y, 0, _surface->h);
+
 	// Maybe implement this method in some other way to avoid having to keep the surface in memory
-	const byte *ptr = (const byte *) _surface->getBasePtr(point.x, point.y);
+	const byte *ptr = (const byte *) _surface->getBasePtr(scaledPoint.x, scaledPoint.y);
 	return *(ptr + 3) == 0xFF;
 }
 
 int VisualImageXMG::getWidth() const {
-	assert(_surface);
-	return _surface->w;
+	return _originalWidth;
 }
 
 int VisualImageXMG::getHeight() const {
-	assert(_surface);
-	return _surface->h;
+	return _originalHeight;
 }
 
 const Graphics::Surface *VisualImageXMG::getSurface() const {

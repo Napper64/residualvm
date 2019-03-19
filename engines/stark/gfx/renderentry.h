@@ -95,15 +95,22 @@ public:
 	 *
 	 * @param position game window coordinates to test
 	 * @param relativePosition successful hit item relative coordinates
+	 * @param cursorRect cursor rectangle to be used to test small world items
 	 * @return successful hit
 	 */
-	bool containsPoint(const Common::Point &position, Common::Point &relativePosition) const;
+	bool containsPoint(const Common::Point &position, Common::Point &relativePosition, const Common::Rect &cursorRect) const;
 
 	/** Mouse picking test for 3D items */
 	bool intersectRay(const Math::Ray &ray) const;
 
 	/** Compare two render entries by their sort keys */
 	static bool compare(const RenderEntry *x, const RenderEntry *y);
+
+	/**
+	 * Compute the 2D screen space bounding rect for the item,
+	 * in original game view coordinates.
+	 */
+	Common::Rect getBoundingRect() const;
 
 protected:
 	Common::String _name;

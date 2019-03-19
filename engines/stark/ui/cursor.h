@@ -57,6 +57,9 @@ public:
 
 	Common::Point getMousePosition(bool unscaled = false) const;
 
+	/** Rectangle at the mouse position to consider to hit test small world items */
+	Common::Rect getHotRectangle() const;
+
 	enum CursorType {
 		kImage = -1,
 		kDefault = 0,
@@ -72,10 +75,13 @@ public:
 	void setMouseHint(const Common::String &hint);
 private:
 	void updateFadeLevel();
+	void updateHintDelay();
 
 	Gfx::Driver *_gfx;
 
 	Common::String _currentHint;
+	int32 _hintDisplayDelay;
+
 	Common::Point _mousePos;
 	VisualImageXMG *_cursorImage;
 	VisualText *_mouseText;

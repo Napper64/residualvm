@@ -35,7 +35,8 @@ namespace Stark {
 
 Settings::Settings(Audio::Mixer *mixer, const ADGameDescription *gd) :
 		_mixer(mixer),
-		_isDemo(gd->flags & ADGF_DEMO) {
+		_isDemo(gd->flags & ADGF_DEMO),
+		_language(gd->language) {
 	// Initialize keys
 	_boolKey[kHighModel] = "enable_high_resolution_models";
 	_boolKey[kSubtitle] = "subtitles";
@@ -56,6 +57,7 @@ Settings::Settings(Audio::Mixer *mixer, const ADGameDescription *gd) :
 	ConfMan.registerDefault(_boolKey[kHighFMV], true);
 	ConfMan.registerDefault(_boolKey[kTimeSkip], false);
 	ConfMan.registerDefault(_intKey[kSaveLoadPage], 0);
+	ConfMan.registerDefault("replacement_png_premultiply_alpha", false);
 
 	// Use the FunCom logo video to check low-resolution fmv
 	Common::SeekableReadStream *lowResFMV = StarkArchiveLoader->getExternalFile("1402_lo_res.bbb", "Global/");
@@ -82,6 +84,29 @@ void Settings::setIntSetting(IntSettingIndex index, int value) {
 	}
 
 	_mixer->setVolumeForSoundType(type, value);
+}
+
+bool Settings::isAssetsModEnabled() const {
+	return ConfMan.getBool("enable_assets_mod");
+}
+
+bool Settings::shouldPreMultiplyReplacementPNGs() const {
+	return ConfMan.getBool("replacement_png_premultiply_alpha");
+}
+
+Gfx::Texture::SamplingFilter Settings::getImageSamplingFilter() const {
+	return ConfMan.getBool("use_linear_filtering") ? Gfx::Texture::kLinear : Gfx::Texture::kNearest;
+}
+
+Common::CodePage Settings::getTextCodePage() const {
+	switch (_language) {
+	case Common::PL_POL:
+		return Common::kWindows1250;
+	case Common::RU_RUS:
+		return Common::kWindows1251;
+	default:
+		return Common::kWindows1252;
+	}
 }
 
 } // End of namespace Stark

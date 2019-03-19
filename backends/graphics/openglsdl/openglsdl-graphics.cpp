@@ -28,6 +28,7 @@
 
 #include "backends/events/sdl/sdl-events.h"
 #include "common/config-manager.h"
+#include "common/file.h"
 #include "engines/engine.h"
 #include "graphics/pixelbuffer.h"
 #include "graphics/opengl/context.h"
@@ -36,6 +37,7 @@
 #include "graphics/opengl/system_headers.h"
 #include "graphics/opengl/texture.h"
 #include "graphics/opengl/tiledsurface.h"
+#include "image/png.h"
 
 OpenGLSdlGraphicsManager::OpenGLSdlGraphicsManager(SdlEventSource *sdlEventSource, SdlWindow *window, const Capabilities &capabilities)
 	:
@@ -159,7 +161,7 @@ void OpenGLSdlGraphicsManager::createOrUpdateScreen() {
 	// Choose the effective window size or fullscreen mode
 	uint effectiveWidth;
 	uint effectiveHeight;
-	if (_fullscreen && !renderToFrameBuffer) {
+	if (_fullscreen && (engineSupportsArbitraryResolutions || renderToFrameBuffer)) {
 		Common::Rect fullscreenResolution = getPreferredFullscreenResolution();
 		effectiveWidth = fullscreenResolution.width();
 		effectiveHeight = fullscreenResolution.height();
@@ -344,11 +346,9 @@ bool OpenGLSdlGraphicsManager::createOrUpdateGLContext(uint gameWidth, uint game
 		#ifdef __amigaos4__
 			SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 1);
 			SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
-			SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, 0);
 		#else
 			SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
 			SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
-			SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_COMPATIBILITY);
 		#endif
 #endif
 #endif
@@ -653,5 +653,65 @@ void OpenGLSdlGraphicsManager::deinitializeRenderer() {
 	_glContext = nullptr;
 }
 #endif // SDL_VERSION_ATLEAST(2, 0, 0)
+
+bool OpenGLSdlGraphicsManager::saveScreenshot(const Common::String &file) const {
+	// Largely based on the implementation from ScummVM
+	uint width = _overlayScreen->getWidth();
+	uint height = _overlayScreen->getHeight();
+
+	uint linePaddingSize = width % 4;
+	uint lineSize = width * 3 + linePaddingSize;
+
+	Common::DumpFile out;
+	if (!out.open(file)) {
+		return false;
+	}
+
+	Common::Array<uint8> pixels;
+	pixels.resize(lineSize * height);
+
+	if (_frameBuffer) {
+		_frameBuffer->detach();
+	}
+	glReadPixels(0, 0, width, height, GL_RGB, GL_UNSIGNED_BYTE, &pixels.front());
+	if (_frameBuffer) {
+		_frameBuffer->attach();
+	}
+
+#ifdef USE_PNG
+	Graphics::PixelFormat format(3, 8, 8, 8, 0, 16, 8, 0, 0);
+	Graphics::Surface data;
+	data.init(width, height, lineSize, &pixels.front(), format);
+	return Image::writePNG(out, data, true);
+#else
+	for (uint y = height; y-- > 0;) {
+		uint8 *line = &pixels.front() + y * lineSize;
+
+		for (uint x = width; x > 0; --x, line += 3) {
+			SWAP(line[0], line[2]);
+		}
+	}
+
+	out.writeByte('B');
+	out.writeByte('M');
+	out.writeUint32LE(height * lineSize + 54);
+	out.writeUint32LE(0);
+	out.writeUint32LE(54);
+	out.writeUint32LE(40);
+	out.writeUint32LE(width);
+	out.writeUint32LE(height);
+	out.writeUint16LE(1);
+	out.writeUint16LE(24);
+	out.writeUint32LE(0);
+	out.writeUint32LE(0);
+	out.writeUint32LE(0);
+	out.writeUint32LE(0);
+	out.writeUint32LE(0);
+	out.writeUint32LE(0);
+	out.write(&pixels.front(), pixels.size());
+
+	return true;
+#endif
+}
 
 #endif

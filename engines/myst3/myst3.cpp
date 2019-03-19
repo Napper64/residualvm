@@ -451,6 +451,8 @@ void Myst3Engine::processInput(bool interactive) {
 			processEventForGamepad(event);
 		}
 
+		processEventForKeyboardState(event);
+
 		if (event.type == Common::EVENT_MOUSEMOVE) {
 			if (_state->getViewType() == kCube
 					&& _cursor->isPositionLocked()) {
@@ -481,9 +483,13 @@ void Myst3Engine::processInput(bool interactive) {
 				continue;
 			}
 
+			if (event.kbdRepeat) {
+				// Ignore keyboard repeat except when entering save names
+				continue;
+			}
+
 			switch (event.kbd.keycode) {
 			case Common::KEYCODE_ESCAPE:
-				_inputEscapePressed = true;
 				_inputEscapePressedNotConsumed = true;
 				break;
 			case Common::KEYCODE_RETURN:
@@ -491,15 +497,8 @@ void Myst3Engine::processInput(bool interactive) {
 				if (event.kbd.hasFlags(Common::KBD_ALT)) {
 					_gfx->toggleFullscreen();
 				} else {
-					_inputEnterPressed = true;
 					shouldInteractWithHoveredElement = true;
 				}
-				break;
-			case Common::KEYCODE_SPACE:
-				_inputSpacePressed = true;
-				break;
-			case Common::KEYCODE_BACKQUOTE: // tilde, used to trigger the easter eggs
-				_inputTildePressed = true;
 				break;
 			case Common::KEYCODE_F5:
 				// Open main menu
@@ -514,24 +513,12 @@ void Myst3Engine::processInput(bool interactive) {
 					_console->onFrame();
 				}
 				break;
-			default:
-				break;
-			}
-		} else if (event.type == Common::EVENT_KEYUP) {
-			switch (event.kbd.keycode) {
-			case Common::KEYCODE_ESCAPE:
-				_inputEscapePressed = false;
-				_inputEscapePressedNotConsumed = false;
-				break;
-			case Common::KEYCODE_RETURN:
-			case Common::KEYCODE_KP_ENTER:
-				_inputEnterPressed = false;
-				break;
-			case Common::KEYCODE_SPACE:
-				_inputSpacePressed = false;
-				break;
-			case Common::KEYCODE_BACKQUOTE:
-				_inputTildePressed = false;
+			case Common::KEYCODE_i:
+				if (event.kbd.flags & Common::KBD_CTRL) {
+					bool mouseInverted = ConfMan.getBool("mouse_inverted");
+					mouseInverted = !mouseInverted;
+					ConfMan.setBool("mouse_inverted", mouseInverted);
+				}
 				break;
 			default:
 				break;
@@ -571,12 +558,62 @@ void Myst3Engine::processInput(bool interactive) {
 	}
 }
 
+void Myst3Engine::processEventForKeyboardState(const Common::Event &event) {
+	if (event.type == Common::EVENT_KEYDOWN) {
+		if (event.kbdRepeat) {
+			// Ignore keyboard repeat except when entering save names
+			return;
+		}
+
+		switch (event.kbd.keycode) {
+			case Common::KEYCODE_ESCAPE:
+				_inputEscapePressed = true;
+				break;
+			case Common::KEYCODE_RETURN:
+			case Common::KEYCODE_KP_ENTER:
+				if (!event.kbd.hasFlags(Common::KBD_ALT)) {
+					_inputEnterPressed = true;
+				}
+				break;
+			case Common::KEYCODE_SPACE:
+				_inputSpacePressed = true;
+				break;
+			case Common::KEYCODE_BACKQUOTE: // tilde, used to trigger the easter eggs
+				_inputTildePressed = true;
+				break;
+			default:
+				break;
+		}
+	} else if (event.type == Common::EVENT_KEYUP) {
+		switch (event.kbd.keycode) {
+			case Common::KEYCODE_ESCAPE:
+				_inputEscapePressed = false;
+				_inputEscapePressedNotConsumed = false;
+				break;
+			case Common::KEYCODE_RETURN:
+			case Common::KEYCODE_KP_ENTER:
+				_inputEnterPressed = false;
+				break;
+			case Common::KEYCODE_SPACE:
+				_inputSpacePressed = false;
+				break;
+			case Common::KEYCODE_BACKQUOTE:
+				_inputTildePressed = false;
+				break;
+			default:
+				break;
+		}
+	}
+}
+
 void Myst3Engine::processEventForGamepad(const Common::Event &event) {
 	if (event.type == Common::EVENT_LBUTTONDOWN) {
 		_state->setGamePadActionPressed(true);
 	} else if (event.type == Common::EVENT_LBUTTONUP) {
 		_state->setGamePadActionPressed(false);
 	} else if (event.type == Common::EVENT_KEYDOWN) {
+		if (event.kbdRepeat) return;
+
 		switch (event.kbd.keycode) {
 		case Common::KEYCODE_RETURN:
 		case Common::KEYCODE_KP_ENTER:
@@ -620,25 +657,6 @@ void Myst3Engine::updateInputState() {
 	_state->setInputTildePressed(_inputTildePressed);
 	_state->setInputSpacePressed(_inputSpacePressed);
 	_state->setInputEscapePressed(_inputEscapePressed);
-}
-
-void Myst3Engine::resetInput() {
-	_inputSpacePressed = false;
-	_inputEnterPressed = false;
-	_inputEscapePressed = false;
-	_inputEscapePressedNotConsumed = false;
-	_inputTildePressed = false;
-
-	updateInputState();
-
-	if (_state->hasVarGamePadUpPressed()) {
-		_state->setGamePadUpPressed(false);
-		_state->setGamePadDownPressed(false);
-		_state->setGamePadLeftPressed(false);
-		_state->setGamePadRightPressed(false);
-		_state->setGamePadActionPressed(false);
-		_state->setGamePadCancelPressed(false);
-	}
 }
 
 void Myst3Engine::interactWithHoveredElement() {
@@ -1564,7 +1582,7 @@ Common::Error Myst3Engine::loadGameState(Common::String fileName, TransitionType
 	_state->setMenuSavedAge(0);
 	_state->setMenuSavedRoom(0);
 	_state->setMenuSavedNode(0);
-
+	_sound->resetSoundVars();
 	_sound->stopMusic(15);
 	_state->setSoundScriptsSuspended(0);
 	_sound->playEffect(696, 60);
@@ -1849,6 +1867,7 @@ void Myst3Engine::settingsInitDefaults() {
 	ConfMan.registerDefault("water_effects", true);
 	ConfMan.registerDefault("transition_speed", 50);
 	ConfMan.registerDefault("mouse_speed", 50);
+	ConfMan.registerDefault("mouse_inverted", false);
 	ConfMan.registerDefault("zip_mode", false);
 	ConfMan.registerDefault("subtitles", false);
 	ConfMan.registerDefault("vibrations", true); // Xbox specific

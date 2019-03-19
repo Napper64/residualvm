@@ -46,7 +46,8 @@ Cursor::Cursor(Gfx::Driver *gfx) :
 		_currentCursorType(kImage),
 		_fading(false),
 		_fadeLevelIncreasing(true),
-		_fadeLevel(0) {
+		_fadeLevel(0),
+		_hintDisplayDelay(150) {
 	setCursorType(kDefault);
 }
 
@@ -70,6 +71,7 @@ void Cursor::setCursorImage(VisualImageXMG *image) {
 
 void Cursor::setMousePosition(const Common::Point &pos) {
 	_mousePos = pos;
+	_hintDisplayDelay = 150;
 }
 
 void Cursor::setFading(bool fading) {
@@ -98,14 +100,25 @@ void Cursor::updateFadeLevel() {
 	}
 }
 
+void Cursor::updateHintDelay() {
+	if (_hintDisplayDelay >= 0) {
+		_hintDisplayDelay -= StarkGlobal->getMillisecondsPerGameloop();
+
+		if (_hintDisplayDelay <= 0) {
+			_hintDisplayDelay = -1;
+		}
+	}
+}
+
 void Cursor::render() {
 	updateFadeLevel();
+	updateHintDelay();
 
 	if (!_gfx->isPosInScreenBounds(_mousePos)) {
 		setCursorType(Cursor::kPassive);
 	}
 
-	if (_mouseText && _gfx->gameViewport().contains(_mousePos)) {
+	if (_mouseText && _gfx->gameViewport().contains(_mousePos) && _hintDisplayDelay <= 0) {
 		_gfx->setScreenViewport(false);
 
 		// TODO: Should probably query the image for the width of the cursor
@@ -148,14 +161,30 @@ void Cursor::setMouseHint(const Common::String &hint) {
 		if (!hint.empty()) {
 			_mouseText = new VisualText(_gfx);
 			_mouseText->setText(hint);
-			_mouseText->setColor(0xFFFFFFFF);
-			_mouseText->setBackgroundColor(0x80000000);
+			_mouseText->setColor(Color(0xFF, 0xFF, 0xFF));
+			_mouseText->setBackgroundColor(Color(0x00, 0x00, 0x00, 0x80));
 			_mouseText->setFont(FontProvider::kSmallFont);
 			_mouseText->setTargetWidth(96);
 		} else {
 			_mouseText = nullptr;
 		}
 		_currentHint = hint;
+		_hintDisplayDelay = 150;
+	}
+}
+
+Common::Rect Cursor::getHotRectangle() const {
+	if (!_cursorImage) {
+		return Common::Rect();
+	} else {
+		Common::Point hotSpot = _cursorImage->getHotspot();
+
+		Common::Rect hotRectangle;
+		hotRectangle.setWidth(_cursorImage->getWidth());
+		hotRectangle.setHeight(_cursorImage->getHeight());
+		hotRectangle.translate(-hotSpot.x, -hotSpot.y);
+
+		return hotRectangle;
 	}
 }
 

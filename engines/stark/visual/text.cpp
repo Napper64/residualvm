@@ -32,6 +32,7 @@
 #include "engines/stark/gfx/texture.h"
 #include "engines/stark/scene.h"
 #include "engines/stark/services/services.h"
+#include "engines/stark/services/settings.h"
 
 #include "common/util.h"
 
@@ -41,12 +42,13 @@ VisualText::VisualText(Gfx::Driver *gfx) :
 		Visual(TYPE),
 		_gfx(gfx),
 		_texture(nullptr),
-		_color(0),
-		_backgroundColor(0),
+		_color(Color(0, 0, 0)),
+		_backgroundColor(Color(0, 0, 0, 0)),
+		_align(Graphics::kTextAlignLeft),
 		_targetWidth(600),
 		_targetHeight(600),
-		_fontCustomIndex(-1),
-		_fontType(FontProvider::kBigFont) {
+		_fontType(FontProvider::kBigFont),
+		_fontCustomIndex(-1) {
 	_surfaceRenderer = _gfx->createSurfaceRenderer();
 	_surfaceRenderer->setNoScalingOverride(true);
 }
@@ -70,17 +72,28 @@ void VisualText::setText(const Common::String &text) {
 	}
 }
 
-void VisualText::setColor(uint32 color) {
-	if (_color != color) {
-		freeTexture();
-		_color = color;
+void VisualText::setColor(const Color &color) {
+	if (_color == color) {
+		return;
 	}
+
+	freeTexture();
+	_color = color;
 }
 
-void VisualText::setBackgroundColor(uint32 color) {
-	if (color != _backgroundColor) {
+void VisualText::setBackgroundColor(const Color &color) {
+	if (color == _backgroundColor) {
+		return;
+	}
+
+	freeTexture();
+	_backgroundColor = color;
+}
+
+void VisualText::setAlign(Graphics::TextAlign align) {
+	if (align != _align) {
 		freeTexture();
-		_backgroundColor = color;
+		_align = align;
 	}
 }
 
@@ -107,39 +120,62 @@ void VisualText::setFont(FontProvider::FontType type, int32 customFontIndex) {
 }
 
 void VisualText::createTexture() {
+	Common::CodePage codePage = StarkSettings->getTextCodePage();
+	Common::U32String unicodeText = Common::convertToU32String(_text.c_str(), codePage);
+
 	// Get the font and required metrics
 	const Graphics::Font *font = StarkFontProvider->getScaledFont(_fontType, _fontCustomIndex);
 	uint scaledLineHeight = StarkFontProvider->getScaledFontHeight(_fontType, _fontCustomIndex);
 	uint originalLineHeight = StarkFontProvider->getOriginalFontHeight(_fontType, _fontCustomIndex);
 	uint maxScaledLineWidth = StarkGfx->scaleWidthOriginalToCurrent(_targetWidth);
 
-	// Word wrap the text and compute the scaled and original resolution bounding boxes
+	// Word wrap the text
+	Common::Array<Common::U32String> lines;
+	font->wordWrapText(unicodeText, maxScaledLineWidth, lines);
+
+	// Use the actual font bounding box to prevent text from being cut off
 	Common::Rect scaledRect;
-	Common::Array<Common::String> lines;
-	scaledRect.right = scaledRect.left + font->wordWrapText(_text, maxScaledLineWidth, lines);
-	scaledRect.bottom = scaledRect.top + scaledLineHeight * lines.size();
-	
+	if (!lines.empty()) {
+		scaledRect = font->getBoundingBox(lines[0]);
+		for (uint i = 1; i < lines.size(); i++) {
+			scaledRect.extend(font->getBoundingBox(lines[i], 0, scaledLineHeight * i));
+		}
+	}
+
+	// Make sure lines have approximately consistent height regardless of the characters they use
+	scaledRect.bottom = MAX<int16>(scaledRect.bottom, scaledLineHeight * lines.size());
+
 	if (!isBlank()) {
-		_originalRect.right = _originalRect.left + StarkGfx->scaleWidthCurrentToOriginal(scaledRect.width());
-		_originalRect.bottom = _originalRect.top + originalLineHeight * lines.size();
+		_originalRect.right = StarkGfx->scaleWidthCurrentToOriginal(scaledRect.right);
+		_originalRect.bottom = originalLineHeight * lines.size();
 	} else {
 		// For Empty text, preserve the original width and height for being used as clicking area
-		_originalRect.right = _originalRect.left + _targetWidth;
-		_originalRect.bottom = _originalRect.top + _targetHeight;
+		_originalRect.right = _targetWidth;
+		_originalRect.bottom = _targetHeight;
 	}
 
 	// Create a surface to render to
 	Graphics::Surface surface;
-	surface.create(scaledRect.width(), scaledRect.height(), Gfx::Driver::getRGBAPixelFormat());
-	surface.fillRect(scaledRect, _backgroundColor);
+	surface.create(scaledRect.right, scaledRect.bottom, Gfx::Driver::getRGBAPixelFormat());
+
+	uint32 color = surface.format.ARGBToColor(
+			_color.a, _color.r, _color.g, _color.b
+	);
+	uint32 bgColor = surface.format.ARGBToColor(
+			_backgroundColor.a, _backgroundColor.r, _backgroundColor.g, _backgroundColor.b
+	);
+
+	surface.fillRect(Common::Rect(surface.w, surface.h), bgColor);
 
 	// Render the lines to the surface
 	for (uint i = 0; i < lines.size(); i++) {
-		font->drawString(&surface, lines[i], 0, scaledLineHeight * i, scaledRect.width(), _color);
+		font->drawString(&surface, lines[i], 0, scaledLineHeight * i, surface.w, color, _align);
 	}
 
 	// Create a texture from the surface
 	_texture = _gfx->createTexture(&surface);
+	_texture->setSamplingFilter(Gfx::Texture::kNearest);
+
 	surface.free();
 }
 
@@ -158,7 +194,6 @@ void VisualText::render(const Common::Point &position) {
 
 void VisualText::resetTexture() {
 	freeTexture();
-	createTexture();
 }
 
 bool VisualText::isBlank() {

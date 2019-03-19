@@ -25,7 +25,6 @@
 #include "engines/stark/gfx/driver.h"
 
 #include "graphics/surface.h"
-#include "graphics/opengl/system_headers.h"
 
 namespace Stark {
 namespace Gfx {
@@ -77,6 +76,23 @@ void OpenGlTexture::updateLevel(uint32 level, const Graphics::Surface *surface, 
 void OpenGlTexture::update(const Graphics::Surface *surface, const byte *palette) {
 	bind();
 	updateLevel(0, surface, palette);
+}
+
+void OpenGlTexture::setSamplingFilter(Texture::SamplingFilter filter) {
+	assert(_levelCount == 0);
+
+	switch (filter) {
+	case kNearest:
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+		break;
+	case kLinear:
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+		break;
+	default:
+		warning("Unhandled sampling filter %d", filter);
+	}
 }
 
 void OpenGlTexture::setLevelCount(uint32 count) {

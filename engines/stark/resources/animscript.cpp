@@ -25,6 +25,8 @@
 #include "common/debug.h"
 #include "common/random.h"
 
+#include "engines/stark/debug.h"
+
 #include "engines/stark/formats/xrc.h"
 
 #include "engines/stark/resources/anim.h"
@@ -43,10 +45,11 @@ AnimScript::~AnimScript() {
 }
 
 AnimScript::AnimScript(Object *parent, byte subType, uint16 index, const Common::String &name) :
-		Object(parent, subType, index, name),
-		_anim(nullptr),
-		_msecsToNextUpdate(0),
-		_nextItemIndex(-1) {
+        Object(parent, subType, index, name),
+        _anim(nullptr),
+        _nextItemIndex(-1),
+        _msecsToNextUpdate(0),
+        _done(false) {
 	_type = TYPE;
 }
 
@@ -70,7 +73,10 @@ void AnimScript::onGameLoop() {
 		return;
 	}
 
+	int executedCommandCount = 0;
+
 	while (_msecsToNextUpdate <= (int32)StarkGlobal->getMillisecondsPerGameloop()) {
+		bool goingBackwards = false;
 		AnimScriptItem *item = _items[_nextItemIndex];
 		_msecsToNextUpdate += item->getDuration();
 
@@ -88,6 +94,9 @@ void AnimScript::onGameLoop() {
 			break;
 		}
 		case AnimScriptItem::kGoToItem:
+			if (item->getOperand() <= (uint32) _nextItemIndex) {
+				goingBackwards = true;
+			}
 			_nextItemIndex = item->getOperand();
 			break;
 		case AnimScriptItem::kDisplayRandomFrame: {
@@ -117,6 +126,16 @@ void AnimScript::onGameLoop() {
 		default:
 			error("Unknown anim script type %d", item->getOpcode());
 		}
+
+		if (_nextItemIndex == 0 || goingBackwards) {
+			_done = true;
+		}
+
+		executedCommandCount++;
+		if (executedCommandCount >= 10) {
+			debugC(kDebugAnimation, "Potential infinite loop in anim script %s", getName().c_str());
+			break;
+		}
 	}
 
 	_msecsToNextUpdate -= StarkGlobal->getMillisecondsPerGameloop();
@@ -130,50 +149,20 @@ void AnimScript::goToNextItem() {
 void AnimScript::goToScriptItem(AnimScriptItem *item) {
 	_nextItemIndex = findItemIndex(item);
 	_msecsToNextUpdate = 0;
+	_done = false;
 
 	if (item && item->getOpcode() == AnimScriptItem::kDisplayFrame) {
 		_anim->selectFrame(item->getOperand());
 	}
 }
 
-uint32 AnimScript::getDurationStartingWithItem(AnimScriptItem *startItem) {
-	uint32 duration = 0;
-	uint32 itemIndex = findItemIndex(startItem);
-
-	while (1) {
-		bool goingBackwards = false;
-		AnimScriptItem *item = _items[itemIndex];
-
-		switch (item->getOpcode()) {
-			case AnimScriptItem::kDisplayFrame:
-			case AnimScriptItem::kPlayAnimSound:
-			case AnimScriptItem::kDisplayRandomFrame:
-				itemIndex += 1;
-				itemIndex %= _items.size();
-				break;
-			case AnimScriptItem::kGoToItem:
-				if (item->getOperand() <= itemIndex) {
-					goingBackwards = true;
-				}
-				itemIndex = item->getOperand();
-				break;
-			default:
-				break;
-		}
-
-		if (itemIndex == 0 || goingBackwards) {
-			break;
-		}
-
-		duration += item->getDuration();
-	}
-
-	return duration;
-}
-
 bool AnimScript::hasReached(AnimScriptItem *item) {
 	int32 index = findItemIndex(item);
 	return _nextItemIndex >= index;
+}
+
+bool AnimScript::isDone() const {
+	return _done;
 }
 
 int32 AnimScript::findItemIndex(AnimScriptItem *item) {
