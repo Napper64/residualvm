@@ -1038,7 +1038,9 @@ const Feature s_features[] = {
 	{"fluidsynth",  "USE_FLUIDSYNTH", "libfluidsynth",    true, "FluidSynth support" },
 	{   "libcurl",     "USE_LIBCURL", "libcurl",          false, "libcurl support" },
 	{    "sdlnet",     "USE_SDL_NET", "SDL_net",          false, "SDL_net support" },
-	{      "glew",        "USE_GLEW", "GLEW",             true,  "GLEW support" }, // ResidualVM specific
+	{      "glew",        "USE_GLEW", "glew32s",          true,  "GLEW support" }, // ResidualVM specific
+
+	
 
 	// Feature flags
 	{            "bink",             "USE_BINK",         "", true,  "Bink video support" },
@@ -1047,7 +1049,7 @@ const Feature s_features[] = {
 	{           "16bit",        "USE_RGB_COLOR",         "", true,  "16bit color support" },
 //	{         "mt32emu",          "USE_MT32EMU",         "", true, "integrated MT-32 emulator" }, // ResidualVM change
 	{            "nasm",             "USE_NASM",         "", true,  "IA-32 assembly support" }, // This feature is special in the regard, that it needs additional handling.
-	{          "opengl",           "USE_OPENGL",         "", true,  "OpenGL support" },
+	{          "opengl",           "USE_OPENGL",         "opengl32", true,  "OpenGL support" },
 	{   "openglshaders",   "USE_OPENGL_SHADERS",         "", true,  "OpenGL support (shaders)" }, // ResidualVM specific
 	{        "opengles",             "USE_GLES",         "", true,  "forced OpenGL ES mode" },
 	{         "taskbar",          "USE_TASKBAR",         "", true,  "Taskbar integration support" },
