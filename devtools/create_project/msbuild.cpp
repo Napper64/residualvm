@@ -435,7 +435,7 @@ void MSBuildProvider::createBuildProp(const BuildSetup &setup, bool isRelease, b
 	if (isRelease) {
 		properties << "\t\t\t<IntrinsicFunctions>true</IntrinsicFunctions>\n"
 		              "\t\t\t<WholeProgramOptimization>true</WholeProgramOptimization>\n"
-		              "\t\t\t<PreprocessorDefinitions>WIN32;RELEASE_BUILD;%(PreprocessorDefinitions)</PreprocessorDefinitions>\n"
+		              "\t\t\t<PreprocessorDefinitions>GLEW_STATIC;WIN32;RELEASE_BUILD;%(PreprocessorDefinitions)</PreprocessorDefinitions>\n"
 		              "\t\t\t<StringPooling>true</StringPooling>\n"
 		              "\t\t\t<BufferSecurityCheck>false</BufferSecurityCheck>\n"
 		              "\t\t\t<DebugInformationFormat></DebugInformationFormat>\n"
