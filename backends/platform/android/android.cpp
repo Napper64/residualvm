@@ -132,7 +132,6 @@ OSystem_Android::OSystem_Android(int audio_sample_rate, int audio_buffer_size) :
 	_ar_correction(true),
 	_show_mouse(false),
 	_show_overlay(false),
-	_virtcontrols_on(false),
 	_enable_zoning(false),
 	_mixer(0),
 	_queuedEventTime(0),
@@ -343,14 +342,17 @@ void OSystem_Android::initBackend() {
 
 	ConfMan.set("fullscreen", "true");
 	ConfMan.registerDefault("aspect_ratio", true);
+	ConfMan.registerDefault("touchpad_mouse_mode", true);
+	ConfMan.registerDefault("vsync", true);
 
 	ConfMan.setInt("autosave_period", 0);
 	ConfMan.setBool("FM_high_quality", false);
 	ConfMan.setBool("FM_medium_quality", true);
 
-	// TODO hackity hack
-	if (ConfMan.hasKey("multi_midi"))
-		_touchpad_mode = !ConfMan.getBool("multi_midi");
+	if (ConfMan.hasKey("touchpad_mouse_mode"))
+		_touchpad_mode = ConfMan.getBool("touchpad_mouse_mode");
+	else
+		ConfMan.setBool("touchpad_mouse_mode", true);
 
 	// must happen before creating TimerManager to avoid race in
 	// creating EventManager
@@ -397,12 +399,13 @@ bool OSystem_Android::hasFeature(Feature f) {
 			f == kFeatureAspectRatioCorrection ||
 			f == kFeatureCursorPalette ||
 			f == kFeatureVirtualKeyboard ||
-			f == kFeatureVirtControls ||
 #ifdef USE_OPENGL
 			f == kFeatureOpenGL ||
 #endif
 			f == kFeatureOverlaySupportsAlpha ||
-			f == kFeatureOpenUrl);
+			f == kFeatureOpenUrl ||
+			f == kFeatureTouchpadMode ||
+			f == kFeatureClipboardSupport);
 }
 
 void OSystem_Android::setFeatureState(Feature f, bool enable) {
@@ -421,13 +424,14 @@ void OSystem_Android::setFeatureState(Feature f, bool enable) {
 		_virtkeybd_on = enable;
 		showVirtualKeyboard(enable);
 		break;
-	case kFeatureVirtControls:
-		_virtcontrols_on = enable;
-		break;
 	case kFeatureCursorPalette:
 		_use_mouse_palette = enable;
 		if (!enable)
 			disableCursorPalette();
+		break;
+	case kFeatureTouchpadMode:
+		ConfMan.setBool("touchpad_mouse_mode", enable);
+		_touchpad_mode = enable;
 		break;
 	default:
 		break;
@@ -442,10 +446,10 @@ bool OSystem_Android::getFeatureState(Feature f) {
 		return _ar_correction;
 	case kFeatureVirtualKeyboard:
 		return _virtkeybd_on;
-	case kFeatureVirtControls:
-		return _virtcontrols_on;
 	case kFeatureCursorPalette:
 		return _use_mouse_palette;
+	case kFeatureTouchpadMode:
+		return ConfMan.getBool("touchpad_mouse_mode");
 	default:
 		return false;
 	}
@@ -594,6 +598,18 @@ Common::String OSystem_Android::getSystemLanguage() const {
 
 bool OSystem_Android::openUrl(const Common::String &url) {
 	return JNI::openUrl(url.c_str());
+}
+
+bool OSystem_Android::hasTextInClipboard() {
+	return JNI::hasTextInClipboard();
+}
+
+Common::String OSystem_Android::getTextFromClipboard() {
+	return JNI::getTextFromClipboard();
+}
+
+bool OSystem_Android::setTextInClipboard(const Common::String &text) {
+	return JNI::setTextInClipboard(text);
 }
 
 Common::String OSystem_Android::getSystemProperty(const char *name) const {

@@ -37,7 +37,9 @@
 #include "graphics/opengl/system_headers.h"
 #include "graphics/opengl/texture.h"
 #include "graphics/opengl/tiledsurface.h"
+#ifdef USE_PNG
 #include "image/png.h"
+#endif
 
 OpenGLSdlGraphicsManager::OpenGLSdlGraphicsManager(SdlEventSource *sdlEventSource, SdlWindow *window, const Capabilities &capabilities)
 	:
@@ -104,18 +106,38 @@ void OpenGLSdlGraphicsManager::setupScreen(uint gameWidth, uint gameHeight, bool
 	assert(accel3d);
 	closeOverlay();
 
-#if SDL_VERSION_ATLEAST(2, 0, 0)
-	// Clear the GL context when going from / to the launcher
-	SDL_GL_DeleteContext(_glContext);
-	_glContext = nullptr;
-#endif
-
 	_engineRequestedWidth = gameWidth;
 	_engineRequestedHeight = gameHeight;
 	_antialiasing = ConfMan.getInt("antialiasing");
 	_fullscreen = fullscreen;
 	_lockAspectRatio = ConfMan.getBool("aspect_ratio");
 	_vsync = ConfMan.getBool("vsync");
+
+#if SDL_VERSION_ATLEAST(2, 0, 0)
+	bool needsWindowReset = false;
+	if (_window->getSDLWindow()) {
+		// The anti-aliasing setting cannot be changed without recreating the window.
+		// So check if the window needs to be recreated.
+
+		int currentSamples = 0;
+		SDL_GL_GetAttribute(SDL_GL_MULTISAMPLESAMPLES, &currentSamples);
+
+		// When rendering to a framebuffer, MSAA is enabled on that framebuffer, not on the screen
+		int targetSamples = shouldRenderToFramebuffer() ? 0 : _antialiasing;
+
+		if (currentSamples != targetSamples) {
+			needsWindowReset = true;
+		}
+	}
+
+	// Clear the GL context when going from / to the launcher
+	SDL_GL_DeleteContext(_glContext);
+	_glContext = nullptr;
+
+	if (needsWindowReset) {
+		_window->destroyWindow();
+	}
+#endif
 
 	createOrUpdateScreen();
 
@@ -156,7 +178,7 @@ void OpenGLSdlGraphicsManager::createOrUpdateScreen() {
 	// If the game can't adapt to any resolution, render it to a framebuffer
 	// so it can be scaled to fill the available space.
 	bool engineSupportsArbitraryResolutions = !g_engine || g_engine->hasFeature(Engine::kSupportsArbitraryResolutions);
-	bool renderToFrameBuffer = !engineSupportsArbitraryResolutions && _capabilities.openGLFrameBuffer;
+	bool renderToFrameBuffer = shouldRenderToFramebuffer();
 
 	// Choose the effective window size or fullscreen mode
 	uint effectiveWidth;
@@ -376,6 +398,9 @@ bool OpenGLSdlGraphicsManager::createOrUpdateGLContext(uint gameWidth, uint game
 			_glContext = SDL_GL_GetCurrentContext();
 			if (!_glContext) {
 				_glContext = SDL_GL_CreateContext(_window->getSDLWindow());
+				if (_glContext) {
+					glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+				}
 			}
 
 			if (_glContext) {
@@ -410,6 +435,11 @@ bool OpenGLSdlGraphicsManager::createOrUpdateGLContext(uint gameWidth, uint game
 	}
 
 	return it != pixelFormats.end();
+}
+
+bool OpenGLSdlGraphicsManager::shouldRenderToFramebuffer() const {
+	bool engineSupportsArbitraryResolutions = !g_engine || g_engine->hasFeature(Engine::kSupportsArbitraryResolutions);
+	return !engineSupportsArbitraryResolutions && _capabilities.openGLFrameBuffer;
 }
 
 bool OpenGLSdlGraphicsManager::isVSyncEnabled() const {

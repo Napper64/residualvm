@@ -355,7 +355,6 @@ public:
 
 		//ResidualVM specific
 		kFeatureOpenGL,
-		kFeatureVirtControls,
 		// Can side textures be rendered on the side for widescreen support?
 		kFeatureSideTextures,
 
@@ -668,6 +667,18 @@ public:
 		return list;
 	};
 #endif
+
+	/**
+	 * !!! ResidualVM specific method !!!
+	 *
+	 * Retrieve a list of supported levels of anti-aliasting.
+	 * Anti-aliasing only works when using one of the hardware
+	 * accelerated renderers. An empty list means anti-aliasing
+	 * is not supported.
+	 */
+	virtual Common::Array<uint> getSupportedAntiAliasingLevels() const {
+		return Common::Array<uint>();
+	}
 
 	/**
 	 * !!! Not used in ResidualVM !!!

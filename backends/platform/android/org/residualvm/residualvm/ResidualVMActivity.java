@@ -11,6 +11,7 @@ import android.net.wifi.WifiManager;
 import android.net.wifi.WifiInfo;
 import android.os.Bundle;
 import android.os.Environment;
+import android.text.ClipboardManager;
 import android.util.DisplayMetrics;
 import android.util.Log;
 import android.view.View;
@@ -89,6 +90,19 @@ public View.OnClickListener pickUpBtnOnClickListener = new View.OnClickListener(
         }
     };
 
+	/* Establish whether the hover events are available */
+	private static boolean _hoverAvailable;
+
+	private ClipboardManager _clipboard;
+
+	static {
+		try {
+			MouseHelper.checkHoverAvailable(); // this throws exception if we're on too old version
+			_hoverAvailable = true;
+		} catch (Throwable t) {
+			_hoverAvailable = false;
+		}
+	}
 
 	private class MyResidualVM extends ResidualVM {
 		private boolean usingSmallScreen() {
@@ -138,6 +152,42 @@ public View.OnClickListener pickUpBtnOnClickListener = new View.OnClickListener(
 		}
 
 		@Override
+		protected boolean hasTextInClipboard() {
+			return _clipboard.hasText();
+		}
+
+		@Override
+		protected byte[] getTextFromClipboard() {
+			CharSequence text = _clipboard.getText();
+			if (text != null) {
+				String encoding = getCurrentCharset();
+				byte[] out;
+				Log.d(LOG_TAG, String.format("Converting from UTF-8 to %s", encoding));
+				try {
+					out = text.toString().getBytes(encoding);
+				} catch (java.io.UnsupportedEncodingException e) {
+					out = text.toString().getBytes();
+				}
+				return out;
+			}
+			return null;
+		}
+
+		@Override
+		protected boolean setTextInClipboard(byte[] text) {
+			String encoding = getCurrentCharset();
+			String out;
+			Log.d(LOG_TAG, String.format("Converting from %s to UTF-8", encoding));
+			try {
+				out = new String(text, encoding);
+			} catch (java.io.UnsupportedEncodingException e) {
+				out = new String(text);
+			}
+			_clipboard.setText(out);
+			return true;
+		}
+
+		@Override
 		protected boolean isConnectionLimited() {
 			WifiManager wifiMgr = (WifiManager)getSystemService(Context.WIFI_SERVICE);
 			if (wifiMgr != null && wifiMgr.isWifiEnabled()) {
@@ -174,6 +224,7 @@ public View.OnClickListener pickUpBtnOnClickListener = new View.OnClickListener(
 
 	private MyResidualVM _residualvm;
 	private ResidualVMEvents _events;
+	private MouseHelper _mouseHelper;
 	private Thread _residualvm_thread;
 
 	@Override
@@ -221,6 +272,8 @@ public View.OnClickListener pickUpBtnOnClickListener = new View.OnClickListener(
 			savePath = getDir("saves", MODE_WORLD_READABLE).getPath();
 		}
 
+		_clipboard = (ClipboardManager)getSystemService(CLIPBOARD_SERVICE);
+
 		// Start ResidualVM
 		_residualvm = new MyResidualVM(main_surface.getHolder());
 
@@ -228,11 +281,16 @@ public View.OnClickListener pickUpBtnOnClickListener = new View.OnClickListener(
 			"ResidualVM",
 			"--config=" + getFileStreamPath("residualvmrc").getPath(),
 			"--path=" + Environment.getExternalStorageDirectory().getPath(),
-			"--gui-theme=modern",
 			"--savepath=" + savePath
 		});
 
-		_events = new ResidualVMEvents(this, _residualvm);
+		Log.d(ResidualVM.LOG_TAG, "Hover available: " + _hoverAvailable);
+		if (_hoverAvailable) {
+			_mouseHelper = new MouseHelper(_residualvm);
+			_mouseHelper.attach(main_surface);
+		}
+
+		_events = new ResidualVMEvents(this, _residualvm, _mouseHelper);
 
 		// On screen buttons listeners
 		((ImageView)findViewById(R.id.options)).setOnClickListener(optionsBtnOnClickListener);
