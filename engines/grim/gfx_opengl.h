@@ -47,7 +47,7 @@ public:
 	GfxOpenGL();
 	virtual ~GfxOpenGL();
 
-	byte *setupScreen(int screenW, int screenH, bool fullscreen) override;
+	void setupScreen(int screenW, int screenH, bool fullscreen) override;
 
 	const char *getVideoDeviceName() override;
 
@@ -89,6 +89,8 @@ public:
 	void drawEMIModelFace(const EMIModel *model, const EMIMeshFace *face) override;
 	void drawModelFace(const Mesh *mesh, const MeshFace *face) override;
 	void drawSprite(const Sprite *sprite) override;
+
+	void drawOverlay(const Overlay *overlay) override;
 
 	void enableLights() override;
 	void disableLights() override;

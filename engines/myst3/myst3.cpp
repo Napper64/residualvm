@@ -64,14 +64,14 @@ namespace Myst3 {
 
 Myst3Engine::Myst3Engine(OSystem *syst, const Myst3GameDescription *version) :
 		Engine(syst), _system(syst), _gameDescription(version),
-		_db(0), _console(0), _scriptEngine(0),
+		_db(0), _scriptEngine(0),
 		_state(0), _node(0), _scene(0), _archiveNode(0),
 		_cursor(0), _inventory(0), _gfx(0), _menu(0),
 		_rnd(0), _sound(0), _ambient(0),
 		_inputSpacePressed(false), _inputEnterPressed(false),
 		_inputEscapePressed(false), _inputTildePressed(false),
 		_inputEscapePressedNotConsumed(false),
-		_interactive(false), _lastSaveTime(0),
+		_interactive(false),
 		_menuAction(0), _projectorBackground(0),
 		_shakeEffect(0), _rotationEffect(0),
 		_backgroundSoundScriptLastRoomId(0),
@@ -122,7 +122,6 @@ Myst3Engine::~Myst3Engine() {
 	delete _archiveNode;
 	delete _db;
 	delete _scriptEngine;
-	delete _console;
 	delete _state;
 	delete _rnd;
 	delete _sound;
@@ -139,7 +138,7 @@ bool Myst3Engine::hasFeature(EngineFeature f) const {
 	bool softRenderer = matchingRendererType == Graphics::kRendererTypeTinyGL;
 
 	return
-		(f == kSupportsRTL) ||
+		(f == kSupportsReturnToLauncher) ||
 		(f == kSupportsLoadingDuringRuntime) ||
 		(f == kSupportsSavingDuringRuntime) ||
 		(f == kSupportsArbitraryResolutions && !softRenderer);
@@ -159,7 +158,7 @@ Common::Error Myst3Engine::run() {
 	_sound = new Sound(this);
 	_ambient = new Ambient(this);
 	_rnd = new Common::RandomSource("sprint");
-	_console = new Console(this);
+	setDebugger(new Console(this));
 	_scriptEngine = new Script(this);
 	_db = new Database(getPlatform(), getGameLanguage(), getGameLocalizationType());
 	_state = new GameState(getPlatform(), _db);
@@ -173,13 +172,13 @@ Common::Error Myst3Engine::run() {
 
 	_system->showMouse(false);
 
+	settingsInitDefaults();
+	syncSoundSettings();
 	openArchives();
 
 	_cursor = new Cursor(this);
 	_inventory = new Inventory(this);
 
-	settingsInitDefaults();
-	syncSoundSettings();
 
 	// Init the font
 	Graphics::Surface *font = loadTexture(1206);
@@ -189,7 +188,10 @@ Common::Error Myst3Engine::run() {
 
 	if (ConfMan.hasKey("save_slot")) {
 		// Load game from specified slot, if any
-		loadGameState(ConfMan.getInt("save_slot"));
+		Common::Error loadError = loadGameState(ConfMan.getInt("save_slot"));
+		if (loadError.getCode() != Common::kNoError) {
+			return loadError;
+		}
 	} else {
 		if (getPlatform() == Common::kPlatformXbox) {
 			// Play the logo videos
@@ -213,7 +215,6 @@ Common::Error Myst3Engine::run() {
 		drawFrame();
 	}
 
-	tryAutoSaving(); //Attempt to autosave before exiting
 	unloadNode();
 
 	_archiveNode->close();
@@ -356,12 +357,12 @@ void Myst3Engine::closeArchives() {
 bool Myst3Engine::checkDatafiles() {
 	if (!SearchMan.hasFile("OVER101.m3o")) {
 		warning("Unable to open the update game archive 'OVER101.m3o'");
-		static const char *updateMessage =
+		Common::U32String updateMessage =
 				_("This version of Myst III has not been updated with the latest official patch.\n"
 						  "Please install the official update corresponding to your game's language.\n"
 						  "The updates can be downloaded from:\n"
-						  "http://www.residualvm.org/downloads/");
-		warning("%s", updateMessage);
+						  "https://www.residualvm.org/downloads/");
+		warning("%s", updateMessage.encode().c_str());
 		GUI::displayErrorDialog(updateMessage);
 		return false;
 	}
@@ -507,12 +508,6 @@ void Myst3Engine::processInput(bool interactive) {
 						_menu->goToNode(kNodeMenuMain);
 				}
 				break;
-			case Common::KEYCODE_d:
-				if (event.kbd.flags & Common::KBD_CTRL) {
-					_console->attach();
-					_console->onFrame();
-				}
-				break;
 			case Common::KEYCODE_i:
 				if (event.kbd.flags & Common::KBD_CTRL) {
 					bool mouseInverted = ConfMan.getBool("mouse_inverted");
@@ -535,10 +530,6 @@ void Myst3Engine::processInput(bool interactive) {
 
 	if (shouldInteractWithHoveredElement && interactive) {
 		interactWithHoveredElement();
-	}
-
-	if (shouldPerformAutoSave(_lastSaveTime)) {
-		tryAutoSaving();
 	}
 
 	// Open main menu
@@ -1327,38 +1318,38 @@ void Myst3Engine::loadNodeSubtitles(uint32 id) {
 	_node->loadSubtitles(id);
 }
 
-const DirectorySubEntry *Myst3Engine::getFileDescription(const Common::String &room, uint32 index, uint16 face,
-                                                         DirectorySubEntry::ResourceType type) {
+ResourceDescription Myst3Engine::getFileDescription(const Common::String &room, uint32 index, uint16 face,
+                                                    Archive::ResourceType type) {
 	Common::String archiveRoom = room;
 	if (archiveRoom == "") {
 		archiveRoom = _db->getRoomName(_state->getLocationRoom(), _state->getLocationAge());
 	}
 
-	const DirectorySubEntry *desc = 0;
+	ResourceDescription desc;
 
 	// Search common archives
 	uint i = 0;
-	while (!desc && i < _archivesCommon.size()) {
+	while (!desc.isValid() && i < _archivesCommon.size()) {
 		desc = _archivesCommon[i]->getDescription(archiveRoom, index, face, type);
 		i++;
 	}
 
 	// Search currently loaded node archive
-	if (!desc && _archiveNode)
+	if (!desc.isValid() && _archiveNode)
 		desc = _archiveNode->getDescription(archiveRoom, index, face, type);
 
 	return desc;
 }
 
-DirectorySubEntryList Myst3Engine::listFilesMatching(const Common::String &room, uint32 index, uint16 face,
-                                                     DirectorySubEntry::ResourceType type) {
+ResourceDescriptionArray Myst3Engine::listFilesMatching(const Common::String &room, uint32 index, uint16 face,
+                                                     Archive::ResourceType type) {
 	Common::String archiveRoom = room;
 	if (archiveRoom == "") {
 		archiveRoom = _db->getRoomName(_state->getLocationRoom(), _state->getLocationAge());
 	}
 
 	for (uint i = 0; i < _archivesCommon.size(); i++) {
-		DirectorySubEntryList list = _archivesCommon[i]->listFilesMatching(archiveRoom, index, face, type);
+		ResourceDescriptionArray list = _archivesCommon[i]->listFilesMatching(archiveRoom, index, face, type);
 		if (!list.empty()) {
 			return list;
 		}
@@ -1368,12 +1359,12 @@ DirectorySubEntryList Myst3Engine::listFilesMatching(const Common::String &room,
 }
 
 Graphics::Surface *Myst3Engine::loadTexture(uint16 id) {
-	const DirectorySubEntry *desc = getFileDescription("GLOB", id, 0, DirectorySubEntry::kRawData);
+	ResourceDescription desc = getFileDescription("GLOB", id, 0, Archive::kRawData);
 
-	if (!desc)
+	if (!desc.isValid())
 		error("Texture %d does not exist", id);
 
-	Common::MemoryReadStream *data = desc->getData();
+	Common::SeekableReadStream *data = desc.getData();
 
 	uint32 magic = data->readUint32LE();
 	if (magic != MKTAG('.', 'T', 'E', 'X'))
@@ -1402,8 +1393,8 @@ Graphics::Surface *Myst3Engine::loadTexture(uint16 id) {
 	return s;
 }
 
-Graphics::Surface *Myst3Engine::decodeJpeg(const DirectorySubEntry *jpegDesc) {
-	Common::MemoryReadStream *jpegStream = jpegDesc->getData();
+Graphics::Surface *Myst3Engine::decodeJpeg(const ResourceDescription *jpegDesc) {
+	Common::SeekableReadStream *jpegStream = jpegDesc->getData();
 
 	Image::JPEGDecoder jpeg;
 	jpeg.setOutputPixelFormat(Texture::getRGBAPixelFormat());
@@ -1522,39 +1513,31 @@ bool Myst3Engine::canLoadGameStateCurrently() {
 	return _interactive;
 }
 
-void Myst3Engine::tryAutoSaving() {
-	if (!canSaveGameStateCurrently()) {
-		return; // Can't save right now, try again on the next frame
-	}
-
-	_lastSaveTime = _system->getMillis();
-
-	// Get a thumbnail of the game screen
-	if (!_menu->isOpen())
-		_menu->generateSaveThumbnail();
-
-	Common::Error result = saveGameState(0, "Autosave");
-	if (result.getCode() != Common::kNoError) {
-		warning("Unable to autosave: %s.", result.getDesc().c_str());
-	}
-}
-
 Common::Error Myst3Engine::loadGameState(int slot) {
 	Common::StringArray filenames = Saves::list(_saveFileMan, getPlatform());
 	return loadGameState(filenames[slot], kTransitionNone);
 }
 
 Common::Error Myst3Engine::loadGameState(Common::String fileName, TransitionType transition) {
-	Common::InSaveFile *saveFile = _saveFileMan->openForLoading(fileName);
+	Common::SharedPtr<Common::InSaveFile> saveFile = Common::SharedPtr<Common::InSaveFile>(_saveFileMan->openForLoading(fileName));
 	if (!saveFile) {
-		return _saveFileMan->getError();
+		return Common::kReadingFailed;
 	}
 
-	if (!_state->load(saveFile)) {
-		delete saveFile;
-		return Common::kUnknownError;
+	Common::Error loadError = _state->load(saveFile.get());
+	if (loadError.getCode() != Common::kNoError) {
+		return loadError;
 	}
-	delete saveFile;
+
+	if (saveFile->eos()) {
+		warning("Unexpected end of file reached when reading '%s'", fileName.c_str());
+		return Common::kReadingFailed;
+	}
+
+	if (saveFile->err()) {
+		warning("An error occured when reading '%s'", fileName.c_str());
+		return Common::kReadingFailed;
+	}
 
 	_inventory->loadFromState();
 
@@ -1572,6 +1555,7 @@ Common::Error Myst3Engine::loadGameState(Common::String fileName, TransitionType
 	_sound->playEffect(696, 60);
 
 	goToNode(0, transition);
+
 	return Common::kNoError;
 }
 
@@ -1588,37 +1572,50 @@ static bool isValidSaveFileName(const Common::String &desc) {
 	return true;
 }
 
-Common::Error Myst3Engine::saveGameState(int slot, const Common::String &desc) {
+Common::Error Myst3Engine::saveGameState(int slot, const Common::String &desc, bool isAutosave) {
 	assert(!desc.empty());
 
 	if (!isValidSaveFileName(desc)) {
 		return Common::Error(Common::kCreatingFileFailed, _("Invalid file name for saving"));
 	}
 
+	// Try to use an already generated thumbnail
+	const Graphics::Surface *thumbnail = _menu->borrowSaveThumbnail();
+	if (!thumbnail) {
+		_menu->generateSaveThumbnail();
+	}
+	thumbnail = _menu->borrowSaveThumbnail();
+	assert(thumbnail);
+
+	return saveGameState(desc, thumbnail, isAutosave);
+}
+
+Common::Error Myst3Engine::saveGameState(const Common::String &desc, const Graphics::Surface *thumbnail, bool isAutosave) {
 	// Strip extension
 	Common::String saveName = desc;
 	if (desc.hasSuffixIgnoreCase(".M3S") || desc.hasSuffixIgnoreCase(".M3X")) {
 		saveName.erase(desc.size() - 4, desc.size());
 	}
 
-	// Try to use an already generated thumbnail
-	const Graphics::Surface *thumbnail = _menu->borrowSaveThumbnail();
-	if (!thumbnail) {
-		return Common::Error(Common::kUnknownError, "No thumbnail");
-	}
-
 	Common::String fileName = Saves::buildName(saveName.c_str(), getPlatform());
-	Common::ScopedPtr<Common::OutSaveFile> save(_saveFileMan->openForSaving(fileName));
-	if (!save) {
-		return _saveFileMan->getError();
-	}
 
 	// Save the state and the thumbnail
-	if (!_state->save(save.get(), saveName, thumbnail)) {
-		return Common::kUnknownError;
+	Common::SharedPtr<Common::OutSaveFile> save = Common::SharedPtr<Common::OutSaveFile>(_saveFileMan->openForSaving(fileName));
+	if (!save) {
+		return Common::kCreatingFileFailed;
 	}
 
-	return Common::kNoError;
+	Common::Error saveError = _state->save(save.get(), saveName, thumbnail, isAutosave);
+	if (saveError.getCode() != Common::kNoError) {
+		return saveError;
+	}
+
+	if (save->err()) {
+		warning("An error occured when writing '%s'", fileName.c_str());
+		return Common::kWritingFailed;
+	}
+
+	return saveError;
 }
 
 void Myst3Engine::animateDirectionChange(float targetPitch, float targetHeading, uint16 scriptTicks) {
@@ -1688,19 +1685,19 @@ void Myst3Engine::animateDirectionChange(float targetPitch, float targetHeading,
 }
 
 void Myst3Engine::getMovieLookAt(uint16 id, bool start, float &pitch, float &heading) {
-	const DirectorySubEntry *desc = getFileDescription("", id, 0, DirectorySubEntry::kMovie);
+	ResourceDescription desc = getFileDescription("", id, 0, Archive::kMovie);
 
-	if (!desc)
-		desc = getFileDescription("", id, 0, DirectorySubEntry::kMultitrackMovie);
+	if (!desc.isValid())
+		desc = getFileDescription("", id, 0, Archive::kMultitrackMovie);
 
-	if (!desc)
+	if (!desc.isValid())
 		error("Movie %d does not exist", id);
 
 	Math::Vector3d v;
 	if (start)
-		v = desc->getVideoData().v1;
+		v = desc.getVideoData().v1;
 	else
-		v = desc->getVideoData().v2;
+		v = desc.getVideoData().v2;
 
 	Math::Vector2d horizontalProjection(v.x(), v.z());
 	horizontalProjection.normalize();

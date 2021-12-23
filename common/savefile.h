@@ -31,6 +31,14 @@
 
 namespace Common {
 
+/**
+ * @defgroup common_savefile Save files
+ * @ingroup common
+ *
+ * @brief API for managing save files.
+ *
+ * @{
+ */
 
 /**
  * A class which allows game engines to load game state data.
@@ -171,18 +179,22 @@ public:
 	 *
 	 * @param oldName  Old name.
 	 * @param newName  New name.
+	 * @param compress  Toggles whether to compress the resulting save file
+	 *                  (default) or not.
 	 * @return true if no error occurred. false otherwise.
 	 */
-	virtual bool renameSavefile(const String &oldName, const String &newName);
+	virtual bool renameSavefile(const String &oldName, const String &newName, bool compress = true);
 
 	/**
 	 * Copy the given savefile.
 	 *
 	 * @param oldName  Old name.
 	 * @param newName  New name.
+	 * @param compress  Toggles whether to compress the resulting save file
+	 *                  (default) or not.
 	 * @return true if no error occurred. false otherwise.
 	 */
-	virtual bool copySavefile(const String &oldName, const String &newName);
+	virtual bool copySavefile(const String &oldName, const String &newName, bool compress = true);
 
 	/**
 	 * List available savegames matching a given pattern.
@@ -204,6 +216,8 @@ public:
 	 */
 	virtual void updateSavefilesList(StringArray &lockedFiles) = 0;
 };
+
+/** @} */
 
 } // End of namespace Common
 

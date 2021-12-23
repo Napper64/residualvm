@@ -1,6 +1,7 @@
 #include <cxxtest/TestSuite.h>
 
 #include "common/str.h"
+#include "common/ustr.h"
 
 class StringTestSuite : public CxxTest::TestSuite
 {
@@ -38,6 +39,15 @@ class StringTestSuite : public CxxTest::TestSuite
 		TS_ASSERT_EQUALS(str.lastChar(), 't');
 		Common::String str2("bar");
 		TS_ASSERT_EQUALS(str2.lastChar(), 'r');
+	}
+
+	void test_firstChar() {
+		Common::String str;
+		TS_ASSERT_EQUALS(str.firstChar(), '\0');
+		str = "first_test";
+		TS_ASSERT_EQUALS(str.firstChar(), 'f');
+		Common::String str2("bar");
+		TS_ASSERT_EQUALS(str2.firstChar(), 'b');
 	}
 
 	void test_concat1() {
@@ -335,6 +345,10 @@ class StringTestSuite : public CxxTest::TestSuite
 		TS_ASSERT(Common::matchString("monkey.s01",  "monkey.s##"));
 		TS_ASSERT(!Common::matchString("monkey.s01", "monkey.###"));
 
+		TS_ASSERT(Common::matchString("monkey.s0#", "monkey.s0\\#"));
+		TS_ASSERT(!Common::matchString("monkey.s0#", "monkey.s0#"));
+		TS_ASSERT(!Common::matchString("monkey.s01", "monkey.s0\\#"));
+
 		TS_ASSERT(!Common::String("").matchString("*_"));
 		TS_ASSERT(Common::String("a").matchString("a***"));
 	}
@@ -348,6 +362,14 @@ class StringTestSuite : public CxxTest::TestSuite
 		Common::String s = Common::String::format("%s%X", "test", 1234);
 		TS_ASSERT_EQUALS(s, "test4D2");
 		TS_ASSERT_EQUALS(s.size(), 7U);
+	}
+
+	void test_ustring_printf() {
+		//Ideally should be the same as above (make String template?)
+		TS_ASSERT_EQUALS( Common::U32String::format(" ").encode(), " " );
+		TS_ASSERT_EQUALS( Common::U32String::format("%s", "test").encode(), "test" );
+		TS_ASSERT_EQUALS( Common::U32String::format("%s%c%s", "Press ", 'X', " to win").encode(), "Press X to win" );
+		TS_ASSERT_EQUALS( Common::U32String::format("Some %s to make this string longer than the default built-in %s %d", "text", "capacity", 123456).encode(), "Some text to make this string longer than the default built-in capacity 123456" );
 	}
 
 	void test_strlcpy() {
@@ -537,5 +559,65 @@ class StringTestSuite : public CxxTest::TestSuite
 		s3.replace(0, 32, "");
 		TS_ASSERT_EQUALS(s3, "TestTestTest");
 		TS_ASSERT_EQUALS(s4, "TestTestTestTestTestTestTestTestTestTestTest");
+	}
+
+	void test_setChar() {
+		Common::String testString("123456");
+		testString.setChar('2', 0);
+		TS_ASSERT(testString == "223456");
+		testString.setChar('0', 5);
+		TS_ASSERT(testString == "223450");
+	}
+
+	void test_insertChar() {
+		Common::String testString("123456");
+		testString.insertChar('2', 0);
+		TS_ASSERT(testString == "2123456");
+		testString.insertChar('0', 5);
+		TS_ASSERT(testString == "21234056");
+	}
+
+	void test_comparison() {
+		Common::String a("0123"), ax("01234"), b("0124"), e;
+		TS_ASSERT_EQUALS(a, a);
+		TS_ASSERT_EQUALS(ax, ax);
+		TS_ASSERT_EQUALS(b, b);
+		TS_ASSERT_EQUALS(e, e);
+
+		TS_ASSERT_DIFFERS(a, ax);
+		TS_ASSERT_DIFFERS(a, b);
+		TS_ASSERT_DIFFERS(a, e);
+		TS_ASSERT_DIFFERS(ax, b);
+		TS_ASSERT_DIFFERS(ax, e);
+		TS_ASSERT_DIFFERS(b, ax);
+		TS_ASSERT_DIFFERS(b, e);
+
+		TS_ASSERT_LESS_THAN(e, a);
+		TS_ASSERT_LESS_THAN(e, ax);
+		TS_ASSERT_LESS_THAN(e, b);
+		TS_ASSERT_LESS_THAN(a, ax);
+		TS_ASSERT_LESS_THAN(a, b);
+		TS_ASSERT_LESS_THAN(ax, b);
+	}
+
+	void test_ustr_comparison() {
+		Common::U32String a("abc"), b("abd");
+
+		TS_ASSERT_EQUALS(a, a);
+		TS_ASSERT_EQUALS(b, b);
+
+		TS_ASSERT_DIFFERS(a, b);
+
+		TS_ASSERT_LESS_THAN(a, b);
+
+		TS_ASSERT_LESS_THAN_EQUALS(a, b);
+		TS_ASSERT_LESS_THAN_EQUALS(a, a);
+		TS_ASSERT_LESS_THAN_EQUALS(b, b);
+
+		//U32String does not define compare, so test both sides
+		TS_ASSERT(a >= a);
+		TS_ASSERT(b > a);
+		TS_ASSERT(b >= b);
+		TS_ASSERT(b >= a);
 	}
 };

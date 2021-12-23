@@ -24,10 +24,23 @@
 #define COMMON_STRING_H
 
 #include "common/scummsys.h"
+#include "common/str-enc.h"
+#include "common/ustr.h"
 
 #include <stdarg.h>
 
 namespace Common {
+
+/**
+ * @defgroup common_str Strings
+ * @ingroup common
+ *
+ * @brief API for working with strings.
+ *
+ * @{
+ */
+
+class U32String;
 
 /**
  * Simple string class for ScummVM. Provides automatic storage managment,
@@ -125,6 +138,9 @@ public:
 	/** Construct a string consisting of the given character. */
 	explicit String(char c);
 
+	/** Construct a new string from the given u32 string. */
+	String(const U32String &str);
+
 	~String();
 
 	String &operator=(const char *str);
@@ -153,6 +169,8 @@ public:
 	bool equalsIgnoreCase(const char *x) const;
 	int compareTo(const char *x) const;             // strcmp clone
 	int compareToIgnoreCase(const char *x) const;   // stricmp clone
+	int compareDictionary(const String &x) const;
+	int compareDictionary(const char *x) const;
 
 	bool hasSuffix(const String &x) const;
 	bool hasSuffix(const char *x) const;
@@ -167,6 +185,7 @@ public:
 	bool contains(const String &x) const;
 	bool contains(const char *x) const;
 	bool contains(char x) const;
+	bool contains(uint32 x) const;
 
 	/** Return uint64 corrensponding to String's contents. */
 	uint64 asUint64() const;
@@ -179,6 +198,7 @@ public:
 	 *      "*": any character, any amount of times.
 	 *      "?": any character, only once.
 	 *      "#": any decimal digit, only once.
+	 *      "\#": #, only once.
 	 *
 	 * Example strings/patterns:
 	 *      String: monkey.s01   Pattern: monkey.s??    => true
@@ -219,6 +239,9 @@ public:
 
 	/** Remove all characters from position p to the p + len. If len = String::npos, removes all characters to the end */
 	void erase(uint32 p, uint32 len = npos);
+
+	/** Erases the character at the given iterator location */
+	iterator erase(iterator it);
 
 	/** Set character c at position p, replacing the previous character there. */
 	void setChar(char c, uint32 p);
@@ -300,6 +323,61 @@ public:
 	 */
 	static String vformat(const char *fmt, va_list args);
 
+	/** Finds the index of a character in the string */
+	size_t find(char c, size_t pos = 0) const;
+
+	/** Does a find for the passed string */
+	size_t find(const char *s) const;
+	uint32 find(const String &str, uint32 pos = 0) const;
+
+	/** Does a reverse find for the passed string */
+	size_t rfind(const char *s) const;
+	size_t rfind(const String &s) const {
+		return rfind(s.c_str());
+	}
+
+	/** Does a reverse find for a passed character */
+	size_t rfind(char c, size_t pos = npos) const;
+
+	/** Find first character in the string matching the passed character */
+	size_t findFirstOf(char c, size_t pos = 0) const;
+
+	/** Find first character in the string that's any character of the passed string */
+	size_t findFirstOf(const char *chars, size_t pos = 0) const;
+	size_t findFirstOf(const String &chars, size_t pos = 0) const {
+		return findFirstOf(chars.c_str(), pos);
+	}
+
+	/** Find the last character in the string that's the specified character */
+	size_t findLastOf(char c, size_t pos = npos) const;
+
+	/** Find the last character in the string that's in any of the passed characters */
+	size_t findLastOf(const char *chars, size_t pos = npos) const;
+	size_t findLastOf(const String &chars, size_t pos = npos) const {
+		return findLastOf(chars.c_str(), pos);
+	}
+
+	/** Find first character in the string that's not the specified character */
+	size_t findFirstNotOf(char c, size_t pos = 0) const;
+
+	/** Find first character in the string that's not any character of the passed string */
+	size_t findFirstNotOf(const char *chars, size_t pos = 0) const;
+	size_t findFirstNotOf(const String &chars, size_t pos = 0) const {
+		return findFirstNotOf(chars.c_str(), pos);
+	}
+
+	/** Find the last character in the string that's not the specified character */
+	size_t findLastNotOf(char c) const;
+
+	/** Find the last character in the string that's not in any of the passed characters */
+	size_t findLastNotOf(const char *chars) const;
+	size_t findLastNotOf(const String &chars) const {
+		return findLastNotOf(chars.c_str());
+	}
+
+	/** Return a substring of this string */
+	String substr(size_t pos = 0, size_t len = npos) const;
+
 public:
 
 	iterator begin() {
@@ -324,12 +402,20 @@ public:
 		return begin() + size();
 	}
 
+	/** Python-like method **/
+	U32String decode(CodePage page = kUtf8) const;
+
 protected:
 	void makeUnique();
 	void ensureCapacity(uint32 new_size, bool keep_old);
 	void incRefCount() const;
 	void decRefCount(int *oldRefCount);
 	void initWithCStr(const char *str, uint32 len);
+
+	bool pointerInOwnBuffer(const char *str) const;
+
+	void decodeUTF8(U32String &dst) const;
+	void decodeOneByte(U32String &dst, CodePage page) const;
 };
 
 // Append two strings to form a new (temp) string
@@ -479,11 +565,27 @@ size_t strnlen(const char *src, size_t maxSize);
  */
 #define tag2str(x)	Common::tag2string(x).c_str()
 
+/**
+ * Converts string with all non-printable characters properly escaped
+ * with use of C++ escape sequences
+ *
+ * @param src The source string.
+ * @param keepNewLines Whether keep newlines or convert them to '\n', default: true.
+ * @return The converted string.
+ */
+String toPrintable(const String &src, bool keepNewLines = true);
+
+/** @} */
 
 } // End of namespace Common
 
 extern int scumm_stricmp(const char *s1, const char *s2);
 extern int scumm_strnicmp(const char *s1, const char *s2, uint n);
 extern char *scumm_strdup(const char *in);
+
+extern int scumm_compareDictionary(const char *s1, const char *s2);
+extern const char *scumm_skipArticle(const char *s1);
+
+extern const char *scumm_strcasestr(const char *s, const char *find);
 
 #endif

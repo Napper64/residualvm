@@ -32,7 +32,7 @@ namespace GUI {
 
 
 Tooltip::Tooltip() :
-	Dialog(-1, -1, -1, -1), _maxWidth(-1), _parent(NULL), _xdelta(0), _ydelta(0) {
+	Dialog(-1, -1, -1, -1), _maxWidth(-1), _parent(nullptr), _xdelta(0), _ydelta(0) {
 
 	_backgroundType = GUI::ThemeEngine::kDialogBackgroundTooltip;
 }
@@ -49,11 +49,24 @@ void Tooltip::setup(Dialog *parent, Widget *widget, int x, int y) {
 	const Graphics::Font *tooltipFont = g_gui.theme()->getFont(ThemeEngine::kFontStyleTooltip);
 
 	_wrappedLines.clear();
-	_w = tooltipFont->wordWrapText(widget->getTooltip(), _maxWidth - 4, _wrappedLines);
-	_h = (tooltipFont->getFontHeight() + 2) * _wrappedLines.size();
+	_w = tooltipFont->wordWrapText(widget->getTooltip(), _maxWidth - 4, _wrappedLines) + 4;
+	_h = (tooltipFont->getFontHeight() + 2) * _wrappedLines.size() + 4;
 
 	_x = MIN<int16>(parent->_x + x + _xdelta, g_gui.getWidth() - _w - 3);
 	_y = MIN<int16>(parent->_y + y + _ydelta, g_gui.getHeight() - _h - 3);
+
+	if (g_gui.useRTL())
+		_x = g_system->getOverlayWidth() - _w - _x + g_gui.getOverlayOffset();
+
+#ifdef USE_TTS
+	if (ConfMan.hasKey("tts_enabled", "residualvm") &&
+			ConfMan.getBool("tts_enabled", "residualvm")) {
+		Common::TextToSpeechManager *ttsMan = g_system->getTextToSpeechManager();
+		if (ttsMan == nullptr)
+			return;
+		ttsMan->say(widget->getTooltip(), Common::TextToSpeechManager::QUEUE_NO_REPEAT);
+	}
+#endif
 }
 
 void Tooltip::drawDialog(DrawLayer layerToDraw) {
@@ -62,12 +75,17 @@ void Tooltip::drawDialog(DrawLayer layerToDraw) {
 
 	Dialog::drawDialog(layerToDraw);
 
-	for (Common::StringArray::const_iterator i = _wrappedLines.begin(); i != _wrappedLines.end(); ++i, ++num) {
+	int16 textX = g_gui.useRTL() ? _x - 3 : _x + 3; // including 2px padding and 1px original code shift
+	int16 textY = _y + 3;
+
+	Graphics::TextAlign textAlignment = g_gui.useRTL() ? Graphics::kTextAlignRight : Graphics::kTextAlignLeft;
+
+	for (Common::U32StringArray::const_iterator i = _wrappedLines.begin(); i != _wrappedLines.end(); ++i, ++num) {
 		g_gui.theme()->drawText(
-			Common::Rect(_x + 1, _y + 1 + num * h, _x + 1 + _w, _y + 1 + (num + 1) * h),
+			Common::Rect(textX, textY + num * h, textX + _w, textY + (num + 1) * h),
 			*i,
 			ThemeEngine::kStateEnabled,
-			Graphics::kTextAlignLeft,
+			textAlignment,
 			ThemeEngine::kTextInversionNone,
 			0,
 			false,

@@ -11,7 +11,9 @@ ResidualVM: A 3D game interpreter
   7. [ Troubleshooting             ](#7-troubleshooting-known-bugs-issues)
   8. [ Debugging                   ](#8-debugging)
   9. [ Bug reports                 ](#9-bug-reports)
- 10. [ Contact                     ](#10-contact)
+ 10. [ Changelog                   ](#10-changelog)
+ 11. [ Credits                     ](#11-credits)
+ 12. [ Contact                     ](#12-contact)
 
 
 ## 1. What is ResidualVM?
@@ -53,10 +55,10 @@ The Longest Journey              | Untested
 The Longest Journey (demo)       | Untested
 
 Specifics can be found at
-http://www.residualvm.org/compatibility/
+https://www.residualvm.org/compatibility/
 
 For more information, see the page on ResidualVM at the wiki page:
-http://wiki.residualvm.org/
+https://wiki.residualvm.org/
 
 
 ## 3. Running GrimE games
@@ -73,7 +75,7 @@ directory. Specifically, you'll need:
   * All of the `LAB` files from both CDs.
   * A copy of the Grim Fandango 1.01 update EXE.
         The patch can be downloaded from:
-        http://demos.residualvm.org/patches/gfupd101.exe
+        https://demos.residualvm.org/patches/gfupd101.exe
 
 #### 3.1.2. Escape from Monkey Island ####
 
@@ -94,12 +96,12 @@ CDs into one directory. Specifically, you'll need:
 
 Language   | URL
 ---------- |---------------------------------------------------------
-English    | http://demos.residualvm.org/patches/MonkeyUpdate.exe
-Portuguese | http://demos.residualvm.org/patches/MonkeyUpdate_BRZ.exe
-German     | http://demos.residualvm.org/patches/MonkeyUpdate_DEU.exe
-Spanish    | http://demos.residualvm.org/patches/MonkeyUpdate_ESP.exe
-French     | http://demos.residualvm.org/patches/MonkeyUpdate_FRA.exe
-Italian    | http://demos.residualvm.org/patches/MonkeyUpdate_ITA.exe
+English    | https://demos.residualvm.org/patches/MonkeyUpdate.exe
+Portuguese | https://demos.residualvm.org/patches/MonkeyUpdate_BRZ.exe
+German     | https://demos.residualvm.org/patches/MonkeyUpdate_DEU.exe
+Spanish    | https://demos.residualvm.org/patches/MonkeyUpdate_ESP.exe
+French     | https://demos.residualvm.org/patches/MonkeyUpdate_FRA.exe
+Italian    | https://demos.residualvm.org/patches/MonkeyUpdate_ITA.exe
 
   * "EFMI Installer" if you have the Mac version of EMI.
 
@@ -173,7 +175,7 @@ update is already applied on the installation media and no action is
 required.
 Otherwise, ResidualVM asks for the update to be installed and refuses to
 run the game. The updates can be downloaded from
-http://demos.residualvm.org/patches/
+https://demos.residualvm.org/patches/
 
 The DVD version is multilingual, you can change the in-game language from
 the game menu. However, you must choose the language of the menus by
@@ -340,9 +342,7 @@ Setting           | Values                   | Effect
 ## 7. Troubleshooting, known bugs, issues
 Grim Fandango had a few issues when it came out and a few new and
 exciting issues when you try to run it on newer hardware. Some of these
-have been fixed in ResidualVM, but ResidualVM itself also has a few new
-issues that we know about:
-https://github.com/residualvm/residualvm/blob/master/KNOWN_BUGS
+have been fixed in ResidualVM.
 
 Look below for help with these issues and if you can't find help here,
 try contacting us at [Contact](#10-contact) section.
@@ -368,7 +368,7 @@ are included for debugging ResidualVM, this should not be necessary for
 normal play at all! However, the curious might like to know how to access
 these tool. Please use at your own risk!
 
-To enter the debug console, press `Ctrl` + `d`. Use the `help` command to
+To enter the debug console, press `Ctrl` + `Alt`  + `d`. Use the `help` command to
 display a list of the available commands. To exit, press `Escape` or type
 `exit` or `quit`.
 
@@ -398,8 +398,8 @@ Command        | Description
 `set_renderer` | Select a renderer (software, OpenGL or OpenGL with shaders)
 
 The `jump` targets can be found at:
-  * http://wiki.residualvm.org/index.php/Grim_Fandango_Debug_Mode#Jump_targets
-  * http://wiki.residualvm.org/index.php/Escape_From_Monkey_Island_Debug_Mode#Jump_targets
+  * https://wiki.residualvm.org/index.php/Grim_Fandango_Debug_Mode#Jump_targets
+  * https://wiki.residualvm.org/index.php/Escape_From_Monkey_Island_Debug_Mode#Jump_targets
 
 ### 8.2. Debugging Grim Fandango ###
 
@@ -537,7 +537,7 @@ You can report bugs at our GitHub issue tracker:
 https://github.com/residualvm/residualvm/issues
 
 Please read the Wiki regarding how to report bugs properly first though:
-http://wiki.residualvm.org/index.php?title=Reporting_Bugs
+https://wiki.residualvm.org/index.php?title=Reporting_Bugs
 
 Remember to always provide the following information in your bug reports:
   * Information about the game (e.g. *Escape from Monkey Island, PS2
@@ -548,8 +548,17 @@ Remember to always provide the following information in your bug reports:
   * Preferably also a link to a save game right before the bug happened.
 
 
-## 10. Contact
-  * Homepage: http://www.residualvm.org/
-  * Wiki: http://wiki.residualvm.org/
-  * Forums: http://forums.residualvm.org/
+## 10. Changelog
+
+Please refer to our extensive Changelog [here](NEWS.md).
+
+## 11. Credits
+
+Please refer to our extensive Credits list [here](AUTHORS).
+
+## 12. Contact
+  * Homepage: https://www.residualvm.org/
+  * Wiki: https://wiki.residualvm.org/
+  * Discord: https://discord.gg/VFQjRfa
+  * Forums: https://forums.residualvm.org/
   * IRC: #residualvm on freenode

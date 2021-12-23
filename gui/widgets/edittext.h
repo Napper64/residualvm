@@ -33,34 +33,35 @@ namespace GUI {
 class EditTextWidget : public EditableWidget {
 protected:
 	typedef Common::String String;
+	typedef Common::U32String U32String;
 
-	String		_backupString;
+	U32String		_backupString;
 
 	int				_leftPadding;
 	int				_rightPadding;
 
 public:
-	EditTextWidget(GuiObject *boss, int x, int y, int w, int h, const String &text, const char *tooltip = 0, uint32 cmd = 0, uint32 finishCmd = 0);
-	EditTextWidget(GuiObject *boss, const String &name, const String &text, const char *tooltp = 0, uint32 cmd = 0, uint32 finishCmd = 0);
+	EditTextWidget(GuiObject *boss, int x, int y, int w, int h, const U32String &text, const U32String &tooltip = Common::U32String(""), uint32 cmd = 0, uint32 finishCmd = 0, ThemeEngine::FontStyle font = ThemeEngine::kFontStyleNormal);
+	EditTextWidget(GuiObject *boss, const String &name, const U32String &text, const U32String &tooltip = Common::U32String(""), uint32 cmd = 0, uint32 finishCmd = 0, ThemeEngine::FontStyle font = ThemeEngine::kFontStyleNormal);
 
-	void setEditString(const String &str);
+	void setEditString(const U32String &str) override;
 
-	virtual void handleMouseDown(int x, int y, int button, int clickCount);
+	void handleMouseDown(int x, int y, int button, int clickCount) override;
 
-	virtual bool wantsFocus() { return true; }
+	bool wantsFocus() override { return true; }
 
-	virtual void reflowLayout();
+	void reflowLayout() override;
 
 protected:
-	void drawWidget();
-	void receivedFocusWidget();
-	void lostFocusWidget();
+	void drawWidget() override;
+	void receivedFocusWidget() override;
+	void lostFocusWidget() override;
 
-	void startEditMode();
-	void endEditMode();
-	void abortEditMode();
+	void startEditMode() override;
+	void endEditMode() override;
+	void abortEditMode() override;
 
-	Common::Rect getEditRect() const;
+	Common::Rect getEditRect() const override;
 
 	uint32 _finishCmd;
 };

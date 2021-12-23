@@ -25,6 +25,7 @@
  * Image decoder used in engines:
  *  - hugo
  *  - mohawk
+ *  - petka
  *  - wintermute
  */
 
@@ -37,6 +38,7 @@
 
 namespace Common {
 class SeekableReadStream;
+class WriteStream;
 }
 
 namespace Graphics {
@@ -65,6 +67,11 @@ private:
 	byte *_palette;
 	uint16 _paletteColorCount;
 };
+
+/**
+ * Outputs an uncompressed BMP stream of the given input surface.
+ */
+bool writeBMP(Common::WriteStream &out, const Graphics::Surface &input);
 
 } // End of namespace Image
 

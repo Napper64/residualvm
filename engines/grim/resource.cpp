@@ -41,6 +41,7 @@
 #include "engines/grim/emi/costumeemi.h"
 #include "engines/grim/emi/modelemi.h"
 #include "engines/grim/emi/skeleton.h"
+#include "engines/grim/remastered/overlay.h"
 #include "engines/grim/patchr.h"
 #include "engines/grim/md5check.h"
 #include "engines/grim/update/update.h"
@@ -79,7 +80,10 @@ ResourceLoader::ResourceLoader() {
 	Common::ArchiveMemberList files, updFiles;
 
 	//Load the update from the executable, if needed
-	const char *updateFilename = g_grim->getUpdateFilename();
+	const char *updateFilename = nullptr;
+	if (g_grim->getGameType() == GType_GRIM && !(g_grim->getGameFlags() & ADGF_REMASTERED)) {
+		updateFilename = g_grim->getUpdateFilename();
+	}
 	if (updateFilename) {
 		Common::File *updStream = new Common::File();
 		if (updStream && updStream->open(updateFilename)) {
@@ -91,15 +95,15 @@ ResourceLoader::ResourceLoader() {
 
 		// Check if the update has been correctly loaded
 		if (!SearchMan.hasArchive("update")) {
-			const char *errorMessage = nullptr;
+			Common::U32String errorMessage;
 			if (g_grim->getGameType() == GType_GRIM) {
 				errorMessage = _("The original patch of Grim Fandango\n"
 								"is missing. Please download it from\n"
-								"http://www.residualvm.org/downloads/\n"
+								"https://www.residualvm.org/downloads/\n"
 								"and put it in the game data files directory");
 			} else if (g_grim->getGameType() == GType_MONKEY4) {
 				errorMessage = _("The original patch of Escape from Monkey Island is missing. \n"
-								"Please download it from http://www.residualvm.org/downloads/\n"
+								"Please download it from https://www.residualvm.org/downloads/\n"
 								"and put it in the game data files directory.\n"
 								"Pay attention to download the correct version according to the game's language");
 			}
@@ -118,7 +122,7 @@ ResourceLoader::ResourceLoader() {
 			SearchMan.listMatchingMembers(files, "voice001.lab");
 		} else {
 			if (!SearchMan.hasFile("residualvm-grim-patch.lab"))
-				error("%s", _("residualvm-grim-patch.lab not found"));
+				error("%s", "residualvm-grim-patch.lab not found");
 
 			SearchMan.listMatchingMembers(files, "residualvm-grim-patch.lab");
 			SearchMan.listMatchingMembers(files, "data005.lab");
@@ -133,6 +137,10 @@ ResourceLoader::ResourceLoader() {
 			SearchMan.listMatchingMembers(files, "local.lab");
 			SearchMan.listMatchingMembers(files, "credits.lab");
 
+			if (g_grim->getGameFlags() & ADGF_REMASTERED) {
+				SearchMan.listMatchingMembers(files, "commentary.lab");
+				SearchMan.listMatchingMembers(files, "images.lab");
+			}
 			//Sort the archives in order to ensure that they are loaded with the correct order
 			Common::sort(files.begin(), files.end(), LabListComperator());
 
@@ -140,14 +148,14 @@ ResourceLoader::ResourceLoader() {
 			//In this case put it in the top of the list
 			const char *datausr_name = "datausr.lab";
 			if (SearchMan.hasFile(datausr_name) && ConfMan.getBool("datausr_load")) {
-				warning("%s", _("Loading datausr.lab. Please note that the ResidualVM-team doesn't provide support for using such patches"));
+				warning("%s", "Loading datausr.lab. Please note that the ResidualVM-team doesn't provide support for using such patches");
 				files.push_front(SearchMan.getMember(datausr_name));
 			}
 		}
 	} else if (g_grim->getGameType() == GType_MONKEY4) {
 		const char *emi_patches_filename = "residualvm-emi-patch.m4b";
 		if (!SearchMan.hasFile(emi_patches_filename))
-			error(_("%s not found"), emi_patches_filename);
+			error("%s not found", emi_patches_filename);
 
 		SearchMan.listMatchingMembers(files, emi_patches_filename);
 
@@ -178,14 +186,14 @@ ResourceLoader::ResourceLoader() {
 			//In this case put it in the top of the list
 			const char *datausr_name = "datausr.m4b";
 			if (SearchMan.hasFile(datausr_name) && ConfMan.getBool("datausr_load")) {
-				warning("%s", _("Loading datausr.m4b. Please note that the ResidualVM-team doesn't provide support for using such patches"));
+				warning("%s", "Loading datausr.m4b. Please note that the ResidualVM-team doesn't provide support for using such patches");
 				files.push_front(SearchMan.getMember(datausr_name));
 			}
 		}
 	}
 
 	if (files.empty())
-		error("%s", _("Cannot find game data - check configuration file"));
+		error("%s", "Cannot find game data - check configuration file");
 
 	//load labs
 	int priority = files.size();
@@ -360,6 +368,29 @@ Costume *ResourceLoader::loadCostume(const Common::String &filename, Actor *owne
 Font *ResourceLoader::loadFont(const Common::String &filename) {
 	Common::SeekableReadStream *stream;
 
+	if (g_grim->getGameType() == GType_GRIM && (g_grim->getGameFlags() & ADGF_REMASTERED)) {
+		Common::String name = "FontsHD/" + filename + ".txt";
+		stream = openNewStreamFile(name, true);
+		if (stream) {
+			Common::String line = stream->readLine();
+			Common::String font;
+			Common::String size;
+			for (int i = 0; i < line.size(); ++i) {
+				if (line[i] == ' ') {
+					font = "FontsHD/" + Common::String(line.c_str(), i);
+					size = Common::String(line.c_str() + i + 1, line.size() - i - 2);
+				}
+			}
+
+			int s = atoi(size.c_str());
+			delete stream;
+			stream = openNewStreamFile(font.c_str(), true);
+			FontTTF *result = new FontTTF();
+			result->loadTTF(font, stream, s);
+			return result;
+		}
+	}
+
 	stream = openNewStreamFile(filename.c_str(), true);
 	if (!stream)
 		error("Could not find font file %s", filename.c_str());
@@ -510,6 +541,22 @@ AnimationEmi *ResourceLoader::loadAnimationEmi(const Common::String &filename) {
 
 	AnimationEmi *result = new AnimationEmi(filename, stream);
 	_emiAnims.push_back(result);
+	delete stream;
+
+	return result;
+}
+
+Overlay *ResourceLoader::loadOverlay(const Common::String &filename) {
+	Common::String fname = fixFilename(filename);
+	Common::SeekableReadStream *stream;
+
+	stream = openNewStreamFile(fname.c_str(), true);
+	if (!stream) {
+		warning("Could not find overlay %s", filename.c_str());
+		return nullptr;
+	}
+
+	Overlay *result = new Overlay(filename, stream);
 	delete stream;
 
 	return result;

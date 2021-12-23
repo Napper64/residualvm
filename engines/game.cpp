@@ -49,8 +49,13 @@ PlainGameDescriptor PlainGameDescriptor::of(const char *gameId, const char *desc
 	return pgd;
 }
 
+QualifiedGameDescriptor::QualifiedGameDescriptor(const char *engine, const PlainGameDescriptor &pgd) :
+		engineId(engine),
+		gameId(pgd.gameId),
+		description(pgd.description) {
+}
+
 DetectedGame::DetectedGame() :
-		engineName(nullptr),
 		hasUnknownFiles(false),
 		canBeAdded(true),
 		language(Common::UNK_LANG),
@@ -58,8 +63,8 @@ DetectedGame::DetectedGame() :
 		gameSupportLevel(kStableGame) {
 }
 
-DetectedGame::DetectedGame(const PlainGameDescriptor &pgd) :
-		engineName(nullptr),
+DetectedGame::DetectedGame(const Common::String &engine, const PlainGameDescriptor &pgd) :
+		engineId(engine),
 		hasUnknownFiles(false),
 		canBeAdded(true),
 		language(Common::UNK_LANG),
@@ -71,8 +76,8 @@ DetectedGame::DetectedGame(const PlainGameDescriptor &pgd) :
 	description = pgd.description;
 }
 
-DetectedGame::DetectedGame(const Common::String &id, const Common::String &d, Common::Language l, Common::Platform p, const Common::String &ex) :
-		engineName(nullptr),
+DetectedGame::DetectedGame(const Common::String &engine, const Common::String &id, const Common::String &d, Common::Language l, Common::Platform p, const Common::String &ex) :
+		engineId(engine),
 		hasUnknownFiles(false),
 		canBeAdded(true),
 		gameSupportLevel(kStableGame) {
@@ -142,7 +147,7 @@ bool DetectionResults::foundUnknownGames() const {
 	return false;
 }
 
-DetectedGames DetectionResults::listRecognizedGames() {
+DetectedGames DetectionResults::listRecognizedGames() const {
 	DetectedGames candidates;
 	for (uint i = 0; i < _detectedGames.size(); i++) {
 		if (_detectedGames[i].canBeAdded) {
@@ -152,8 +157,16 @@ DetectedGames DetectionResults::listRecognizedGames() {
 	return candidates;
 }
 
-Common::String DetectionResults::generateUnknownGameReport(bool translate, uint32 wordwrapAt) const {
-	assert(!_detectedGames.empty());
+DetectedGames DetectionResults::listDetectedGames() const {
+	return _detectedGames;
+}
+
+Common::U32String DetectionResults::generateUnknownGameReport(bool translate, uint32 wordwrapAt) const {
+	return ::generateUnknownGameReport(_detectedGames, translate, false, wordwrapAt);
+}
+
+Common::U32String generateUnknownGameReport(const DetectedGames &detectedGames, bool translate, bool fullPath, uint32 wordwrapAt) {
+	assert(!detectedGames.empty());
 
 	const char *reportStart = _s("The game in '%s' seems to be an unknown game variant.\n\n"
 	                             "Please report the following data to the ResidualVM team at %s "
@@ -161,33 +174,34 @@ Common::String DetectionResults::generateUnknownGameReport(bool translate, uint3
 	                             "its version, language, etc.:");
 	const char *reportEngineHeader = _s("Matched game IDs for the %s engine:");
 
-	Common::String report = Common::String::format(
-			translate ? _(reportStart) : reportStart, _detectedGames[0].path.c_str(),
+	Common::U32String report = Common::U32String::format(
+			translate ? _(reportStart) : Common::U32String(reportStart),
+			fullPath ? detectedGames[0].path.c_str() : detectedGames[0].shortPath.c_str(),
 			"https://github.com/residualvm/residualvm/issues"
 	);
-	report += "\n";
+	report += Common::U32String("\n");
 
 	FilePropertiesMap matchedFiles;
 
-	const char *currentEngineName = nullptr;
-	for (uint i = 0; i < _detectedGames.size(); i++) {
-		const DetectedGame &game = _detectedGames[i];
+	Common::String currentEngineId;
+	for (uint i = 0; i < detectedGames.size(); i++) {
+		const DetectedGame &game = detectedGames[i];
 
 		if (!game.hasUnknownFiles) continue;
 
-		if (!currentEngineName || strcmp(currentEngineName, game.engineName) != 0) {
-			currentEngineName = game.engineName;
+		if (currentEngineId.empty() || currentEngineId != game.engineId) {
+			currentEngineId = game.engineId;
 
 			// If the engine is not the same as for the previous entry, print an engine line header
-			report += "\n";
-			report += Common::String::format(
-					translate ? _(reportEngineHeader) : reportEngineHeader,
-					game.engineName
+			report += Common::U32String("\n");
+			report += Common::U32String::format(
+					translate ? _(reportEngineHeader) : Common::U32String(reportEngineHeader),
+					game.engineId.c_str()
 			);
-			report += " ";
+			report += Common::U32String(" ");
 
 		} else {
-			report += ", ";
+			report += Common::U32String(", ");
 		}
 
 		// Add the gameId to the list of matched games for the engine
@@ -205,12 +219,19 @@ Common::String DetectionResults::generateUnknownGameReport(bool translate, uint3
 		report.wordWrap(wordwrapAt);
 	}
 
-	report += "\n\n";
+	report += Common::U32String("\n\n");
 
 	for (FilePropertiesMap::const_iterator file = matchedFiles.begin(); file != matchedFiles.end(); ++file)
 		report += Common::String::format("  {\"%s\", 0, \"%s\", %d},\n", file->_key.c_str(), file->_value.md5.c_str(), file->_value.size);
 
-	report += "\n";
+	report += Common::U32String("\n");
 
 	return report;
+}
+
+Common::U32String generateUnknownGameReport(const DetectedGame &detectedGame, bool translate, bool fullPath, uint32 wordwrapAt) {
+	DetectedGames detectedGames;
+	detectedGames.push_back(detectedGame);
+
+	return generateUnknownGameReport(detectedGames, translate, fullPath, wordwrapAt);
 }

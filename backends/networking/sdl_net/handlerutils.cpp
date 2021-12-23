@@ -28,6 +28,7 @@
 #include "common/file.h"
 #include "common/translation.h"
 #include "common/unzip.h"
+#include "common/encoding.h"
 
 namespace Networking {
 
@@ -164,7 +165,8 @@ bool HandlerUtils::hasPermittedPrefix(const Common::String &path) {
 #else
 	prefix = ConfMan.get("savepath");
 #endif
-	return (normalized.hasPrefix(normalizePath(prefix)));
+	return normalized.hasPrefix(normalizePath(prefix))
+	       || normalizePath(prefix).compareTo(normalized + "/") == 0;
 }
 
 bool HandlerUtils::permittedPath(const Common::String path) {
@@ -172,7 +174,7 @@ bool HandlerUtils::permittedPath(const Common::String path) {
 }
 
 void HandlerUtils::setMessageHandler(Client &client, Common::String message, Common::String redirectTo) {
-	Common::String response = "<html><head><title>ScummVM</title></head><body>{message}</body></html>";
+	Common::String response = "<html><head><title>ResidualVM</title><meta charset=\"utf-8\"/></head><body>{message}</body></html>";
 
 	// load stylish response page from the archive
 	Common::SeekableReadStream *const stream = getArchiveFile(INDEX_PAGE_NAME);
@@ -194,7 +196,7 @@ void HandlerUtils::setFilesManagerErrorMessageHandler(Client &client, Common::St
 			message.c_str(),
 			client.queryParameter("ajax") == "true" ? "AJAX" : "",
 			"%2F", //that's encoded "/"
-			_("Back to the files manager")
+			Common::convertFromU32String(_("Back to the files manager")).c_str()
 		),
 		redirectTo
 	);

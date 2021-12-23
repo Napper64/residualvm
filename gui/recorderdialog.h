@@ -60,19 +60,19 @@ private:
 	void updateSelection(bool redraw);
 	void updateScreenshot();
 public:
-	Common::String _author;
-	Common::String _name;
-	Common::String _notes;
+	Common::U32String _author;
+	Common::String    _name;
+	Common::String    _notes;
 	enum DialogResult {
 		kRecordDialogClose,
 		kRecordDialogRecord,
 		kRecordDialogPlayback
 	};
 	RecorderDialog();
-	~RecorderDialog();
+	~RecorderDialog() override;
 
-	virtual void handleCommand(GUI::CommandSender *sender, uint32 cmd, uint32 data);
-	virtual void reflowLayout();
+	void handleCommand(GUI::CommandSender *sender, uint32 cmd, uint32 data) override;
+	void reflowLayout() override;
 
 	int runModal(Common::String &target);
 	const Common::String getFileName() {return _filename;}

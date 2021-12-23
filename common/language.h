@@ -27,12 +27,23 @@
 
 namespace Common {
 
+/**
+ * @defgroup common_language Language
+ * @ingroup common
+ *
+ * @brief API for managing game language.
+ *
+ *		
+ * @{
+ */
+
 class String;
 
 /**
  * List of game language.
  */
 enum Language {
+	ZH_ANY,     // Generic Chinese (when only one game version exist)
 	ZH_CNA,
 	ZH_TWN,
 	HR_HRV,
@@ -54,6 +65,7 @@ enum Language {
 	KO_KOR,
 	LV_LAT,
 	NB_NOR,
+	FA_IRN,
 	PL_POL,
 	PT_BRA,
 	PT_POR,
@@ -61,7 +73,9 @@ enum Language {
 	SK_SVK,
 	ES_ESP,
 	SE_SWE,
+	TR_TUR,
 	UA_UKR,
+	SR_SER,
 
 	UNK_LANG = -1	// Use default language (i.e. none specified)
 };
@@ -88,6 +102,8 @@ const String getGameGUIOptionsDescriptionLanguage(Common::Language lang);
 
 // TODO: Document this GUIO related function
 bool checkGameGUIOptionLanguage(Common::Language lang, const String &str);
+
+/** @} */
 
 } // End of namespace Common
 

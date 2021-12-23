@@ -211,6 +211,8 @@ const ControlDescriptor controls[] = {
 	{ "KEY_MOUSE_B2", KEYCODE_MOUSE_B2 },
 	{ "KEY_MOUSE_B3", KEYCODE_MOUSE_B3 },
 	{ "KEY_MOUSE_B4", KEYCODE_MOUSE_B4 },
+	{ "KEY_MOUSE_LONG", KEYCODE_MOUSE_B4 }, // TODO: Actually map this
+	{ "KEY_MOUSE_PING", KEYCODE_MOUSE_B4 }, // TODO: Actually map this
 	{ "AXIS_JOY1_X", KEYCODE_AXIS_JOY1_X },
 	{ "AXIS_JOY1_Y", KEYCODE_AXIS_JOY1_Y },
 	{ "AXIS_JOY1_Z", KEYCODE_AXIS_JOY1_Z },
@@ -263,7 +265,7 @@ const ControlDescriptor controls[] = {
 	{ "KEY_JOY2_RMUSHROOM", KEYCODE_JOY2_RIGHTSTICK },
 
 // tell EMI that the joystick can be used
-	{ "joy_selected", 1 },
+	{ "joy_selected", 0 },
 
 	{ nullptr, 0 }
 };
@@ -295,11 +297,6 @@ void GrimEngine::handleControls(Common::EventType operation, const Common::KeySt
 		return;
 	}
 
-	if (key.hasFlags(Common::KBD_CTRL) && key.keycode == Common::KEYCODE_d && operation == Common::EVENT_KEYDOWN) {
-		_debugger->attach();
-		clearEventQueue();
-		return;
-	}
 	// If we're not supposed to handle the key then don't
 	if (!_controlsEnabled[key.keycode])
 		return;
@@ -349,6 +346,19 @@ void GrimEngine::handleJoyAxis(byte axis, int16 position) {
 			error("handleJoyAxis: invalid joystick handler");
 		}
 		_joyAxisPosition[axis] = fpos;
+	}
+}
+
+void GrimEngine::handleMouseAxis(byte axis, int16 position) {
+	int keycode = KEYCODE_AXIS_MOUSE_X;
+	if (!_controlsEnabled[keycode])
+		return;
+
+	LuaObjects objects;
+	objects.add(keycode);
+	objects.add(position);
+	if (!LuaBase::instance()->callback("axisHandler", objects)) {
+		error("handleJoyAxis: invalid joystick handler");
 	}
 }
 

@@ -40,7 +40,7 @@
 #include "common/dct.h"
 #include "common/system.h"
 
-#include "graphics/yuva_to_rgba.h" // ResidualVM specific
+#include "graphics/yuv_to_rgb.h"
 #include "graphics/surface.h"
 
 #include "video/binkdata.h"
@@ -332,9 +332,6 @@ BinkDecoder::BinkVideoTrack::~BinkVideoTrack() {
 	_surface.free();
 }
 
-// ResidualVM-specific class -- Duplicated from audio/decoders/quicktime.cpp
-// If the Bink seeking code ever makes it to ScummVM, move SilentAudioStream
-// out of quicktime.cpp so that it can be shared.
 /**
  * An AudioStream that just returns silent samples and runs infinitely.
  */
@@ -356,14 +353,12 @@ private:
 	bool _isStereo;
 };
 
-// ResidualVM-specific function
 Common::Rational BinkDecoder::getFrameRate() {
 	BinkVideoTrack *videoTrack = (BinkVideoTrack *)getTrack(0);
 
 	return videoTrack->getFrameRate();
 }
 
-// ResidualVM-specific function
 bool BinkDecoder::seekIntern(const Audio::Timestamp &time) {
 	BinkVideoTrack *videoTrack = (BinkVideoTrack *)getTrack(0);
 
@@ -404,7 +399,6 @@ bool BinkDecoder::seekIntern(const Audio::Timestamp &time) {
 	return true;
 }
 
-// ResidualVM-specific function
 uint32 BinkDecoder::findKeyFrame(uint32 frame) const {
 	assert(frame < _frames.size());
 
@@ -417,12 +411,10 @@ uint32 BinkDecoder::findKeyFrame(uint32 frame) const {
 	return frame;
 }
 
-// ResidualVM-specific function
 int BinkDecoder::BinkAudioTrack::getRate() {
 	return _audioStream->getRate();
 }
 
-// ResidualVM-specific function
 void BinkDecoder::BinkAudioTrack::skipSamples(const Audio::Timestamp &length) {
 	int32 sampleCount = length.totalNumberOfFrames();
 
@@ -437,7 +429,6 @@ void BinkDecoder::BinkAudioTrack::skipSamples(const Audio::Timestamp &length) {
 	delete[] tempBuffer;
 }
 
-// ResidualVM-specific function
 bool BinkDecoder::BinkAudioTrack::seek(const Audio::Timestamp &time) {
 	// Don't window the output with the previous frame -- there is no output from the previous frame
 	_audioInfo->first = true;
@@ -459,7 +450,6 @@ bool BinkDecoder::BinkAudioTrack::seek(const Audio::Timestamp &time) {
 	return true;
 }
 
-// ResidualVM-specific function
 bool BinkDecoder::BinkVideoTrack::rewind() {
 	if (!VideoTrack::rewind()) {
 		return false;
@@ -505,10 +495,15 @@ void BinkDecoder::BinkVideoTrack::decodePacket(VideoFrame &frame) {
 	// Convert the YUV data we have to our format
 	// The width used here is the surface-width, and not the video-width
 	// to allow for odd-sized videos.
-	// ResidualVM: added support for Alpha version: YUVAToRGBAMan, _curPlanes[3]
-	assert(_curPlanes[0] && _curPlanes[1] && _curPlanes[2] && _curPlanes[3]);
-	YUVAToRGBAMan.convert420(&_surface, Graphics::YUVAToRGBAManager::kScaleITU, _curPlanes[0], _curPlanes[1], _curPlanes[2], _curPlanes[3],
-			_surfaceWidth, _surfaceHeight, _yBlockWidth * 8, _uvBlockWidth * 8);
+	if (_hasAlpha) {
+		assert(_curPlanes[0] && _curPlanes[1] && _curPlanes[2] && _curPlanes[3]);
+		YUVToRGBMan.convert420Alpha(&_surface, Graphics::YUVToRGBManager::kScaleITU, _curPlanes[0], _curPlanes[1], _curPlanes[2], _curPlanes[3],
+				_surfaceWidth, _surfaceHeight, _yBlockWidth * 8, _uvBlockWidth * 8);
+	} else {
+		assert(_curPlanes[0] && _curPlanes[1] && _curPlanes[2]);
+		YUVToRGBMan.convert420(&_surface, Graphics::YUVToRGBManager::kScaleITU, _curPlanes[0], _curPlanes[1], _curPlanes[2],
+				_surfaceWidth, _surfaceHeight, _yBlockWidth * 8, _uvBlockWidth * 8);
+	}
 
 	// And swap the planes with the reference planes
 	for (int i = 0; i < 4; i++)
@@ -1312,6 +1307,9 @@ void BinkDecoder::BinkVideoTrack::readDCTCoeffs(VideoFrame &video, int32 *block,
 				coefList[listPos]      = 0;
 				modeList[listPos++]    = 0;
 				break;
+
+			default:
+				break;
 			}
 		}
 	}
@@ -1404,16 +1402,21 @@ void BinkDecoder::BinkVideoTrack::readResidue(VideoFrame &video, int16 *block, i
 				break;
 
 			case 3:
-				nzCoeff[nzCoeffCount++] = binkScan[ccoef];
+				{
+					nzCoeff[nzCoeffCount++] = binkScan[ccoef];
 
-				int sign = -(int)video.bits->getBit();
-				block[binkScan[ccoef]] = (mask ^ sign) - sign;
+					int sign = -(int)video.bits->getBit();
+					block[binkScan[ccoef]] = (mask ^ sign) - sign;
 
-				coefList[listPos]   = 0;
-				modeList[listPos++] = 0;
-				masksCount--;
-				if (masksCount < 0)
-					return;
+					coefList[listPos]   = 0;
+					modeList[listPos++] = 0;
+					masksCount--;
+					if (masksCount < 0)
+						return;
+				}
+				break;
+
+			default:
 				break;
 			}
 		}

@@ -43,7 +43,7 @@ Common::Rect getBoundingBoxImpl(const Font &font, const StringType &str, int x, 
 	// We follow the logic of drawStringImpl here. The only exception is
 	// that we do allow an empty width to be specified here. This allows us
 	// to obtain the complete bounding box of a string.
-	const int leftX = x, rightX = w ? (x + w) : 0x7FFFFFFF;
+	const int leftX = x, rightX = w ? (x + w + 1) : 0x7FFFFFFF;
 	int width = font.getStringWidth(str);
 
 	if (align == kTextAlignCenter)
@@ -100,7 +100,7 @@ void drawStringImpl(const Font &font, Surface *dst, const StringType &str, int x
 	// ever change something here we will need to change it there too.
 	assert(dst != 0);
 
-	const int leftX = x, rightX = x + w;
+	const int leftX = x, rightX = x + w + 1;
 	int width = font.getStringWidth(str);
 
 	if (align == kTextAlignCenter)
@@ -142,15 +142,21 @@ struct WordWrapper {
 		line.clear();
 		w = 0;
 	}
+
+	void clear() {
+		lines.clear();
+		actualMaxLineWidth = 0;
+	}
 };
 
 template<class StringType>
-int wordWrapTextImpl(const Font &font, const StringType &str, int maxWidth, Common::Array<StringType> &lines, int initWidth) {
+int wordWrapTextImpl(const Font &font, const StringType &str, int maxWidth, Common::Array<StringType> &lines, int initWidth, bool evenWidthLinesModeEnabled, bool wrapOnExplicitNewLines) {
 	WordWrapper<StringType> wrapper(lines);
 	StringType line;
 	StringType tmpStr;
 	int lineWidth = initWidth;
 	int tmpWidth = 0;
+	int fullTextWidthEWL = initWidth; // this replaces new line characters (if any) with single spaces - it is used in Even Width Lines mode
 
 	// The rough idea behind this algorithm is as follows:
 	// We accumulate characters into the string tmpStr. Whenever a full word
@@ -166,81 +172,222 @@ int wordWrapTextImpl(const Font &font, const StringType &str, int maxWidth, Comm
 	// lines.
 
 	typename StringType::unsigned_type last = 0;
-	for (typename StringType::const_iterator x = str.begin(); x != str.end(); ++x) {
-		typename StringType::unsigned_type c = *x;
 
-		// Convert Windows and Mac line breaks into plain \n
-		if (c == '\r') {
-			if (x != str.end() && *(x + 1) == '\n') {
-				++x;
+	// When EvenWidthLines mode is enabled then we require an early loop over the entire string
+	// in order to get the full width of the text
+	//
+	// "Wrap On Explicit New Lines" and "Even Width Lines" modes are mutually exclusive,
+	// If both are set to true and there are new line characters in the text,
+	// then "Even Width Lines" mode is disabled.
+	//
+	if (evenWidthLinesModeEnabled) {
+		// Early loop to get the full width of the text
+		for (typename StringType::const_iterator x = str.begin(); x != str.end(); ++x) {
+			typename StringType::unsigned_type c = *x;
+
+			// Check for Windows and Mac line breaks
+			if (c == '\r') {
+				if (x != str.end() && *(x + 1) == '\n') {
+					++x;
+				}
+				c = '\n';
 			}
-			c = '\n';
+
+			if (c == '\n') {
+				if (!wrapOnExplicitNewLines) {
+					c = ' ';
+				} else {
+					evenWidthLinesModeEnabled = false;
+					break;
+				}
+			}
+
+			const int w = font.getCharWidth(c) + font.getKerningOffset(last, c);
+			last = c;
+			fullTextWidthEWL += w;
 		}
+	}
 
-		const int currentCharWidth = font.getCharWidth(c);
-		const int w = currentCharWidth + font.getKerningOffset(last, c);
-		last = c;
-		const bool wouldExceedWidth = (lineWidth + tmpWidth + w > maxWidth);
-
-		// If this char is a whitespace, then it represents a potential
-		// 'wrap point' where wrapping could take place. Everything that
-		// came before it can now safely be added to the line, as we know
-		// that it will not have to be wrapped.
-		if (Common::isSpace(c)) {
-			line += tmpStr;
-			lineWidth += tmpWidth;
-
-			tmpStr.clear();
-			tmpWidth = 0;
-
-			// If we encounter a line break (\n), or if the new space would
-			// cause the line to overflow: start a new line
-			if (c == '\n' || wouldExceedWidth) {
-				wrapper.add(line, lineWidth);
+	int targetTotalLinesNumberEWL = 0;
+	int targetMaxLineWidth = 0;
+	do {
+		if (evenWidthLinesModeEnabled) {
+			wrapper.clear();
+			targetTotalLinesNumberEWL += 1;
+			// We add +2 to the fullTextWidthEWL to account for possible shadow pixels
+			// We add +10 * font.getCharWidth(' ') to the quotient since we want to allow some extra margin (about an extra wprd's length)
+			// since that yields better looking results
+			targetMaxLineWidth = ((fullTextWidthEWL + 2) / targetTotalLinesNumberEWL) + 10 * font.getCharWidth(' ');
+			if (targetMaxLineWidth > maxWidth) {
+				// repeat the loop with increased targetTotalLinesNumberEWL
 				continue;
 			}
+		} else {
+			targetMaxLineWidth = maxWidth;
 		}
 
-		// If the max line width would be exceeded by adding this char,
-		// insert a line break.
-		if (wouldExceedWidth) {
-			// Commit what we have so far, *if* we have anything.
-			// If line is empty, then we are looking at a word
-			// which exceeds the maximum line width.
-			if (lineWidth > 0) {
-				wrapper.add(line, lineWidth);
-				// Trim left side
-				while (tmpStr.size() && Common::isSpace(tmpStr[0])) {
-					tmpStr.deleteChar(0);
-					// This is not very fast, but it is the simplest way to
-					// assure we do not mess something up because of kerning.
-					tmpWidth = font.getStringWidth(tmpStr);
+		last = 0;
+		tmpWidth = 0;
+
+		for (typename StringType::const_iterator x = str.begin(); x != str.end(); ++x) {
+			typename StringType::unsigned_type c = *x;
+
+			// Convert Windows and Mac line breaks into plain \n
+			if (c == '\r') {
+				if (x != str.end() && *(x + 1) == '\n') {
+					++x;
 				}
+				c = '\n';
+			}
+			// if wrapping on explicit new lines is disabled, then new line characters should be treated as a single white space char
+			if (!wrapOnExplicitNewLines && c == '\n')  {
+				c = ' ';
+			}
 
-				if (tmpStr.empty()) {
-					// If tmpStr is empty, we might have removed the space before 'c'.
-					// That means we have to recompute the kerning.
+			const int currentCharWidth = font.getCharWidth(c);
+			const int w = currentCharWidth + font.getKerningOffset(last, c);
+			last = c;
+			const bool wouldExceedWidth = (lineWidth + tmpWidth + w > targetMaxLineWidth);
 
-					tmpWidth += currentCharWidth + font.getKerningOffset(0, c);
-					tmpStr += c;
+			// If this char is a whitespace, then it represents a potential
+			// 'wrap point' where wrapping could take place. Everything that
+			// came before it can now safely be added to the line, as we know
+			// that it will not have to be wrapped.
+			if (Common::isSpace(c)) {
+				line += tmpStr;
+				lineWidth += tmpWidth;
+
+				tmpStr.clear();
+				tmpWidth = 0;
+
+				// If we encounter a line break (\n), or if the new space would
+				// cause the line to overflow: start a new line
+				if ((wrapOnExplicitNewLines && c == '\n') || wouldExceedWidth) {
+					wrapper.add(line, lineWidth);
 					continue;
 				}
-			} else {
-				wrapper.add(tmpStr, tmpWidth);
 			}
+
+			// If the max line width would be exceeded by adding this char,
+			// insert a line break.
+			if (wouldExceedWidth) {
+				// Commit what we have so far, *if* we have anything.
+				// If line is empty, then we are looking at a word
+				// which exceeds the maximum line width.
+				if (lineWidth > 0) {
+					wrapper.add(line, lineWidth);
+					// Trim left side
+					while (tmpStr.size() && Common::isSpace(tmpStr[0])) {
+						tmpStr.deleteChar(0);
+						// This is not very fast, but it is the simplest way to
+						// assure we do not mess something up because of kerning.
+						tmpWidth = font.getStringWidth(tmpStr);
+					}
+
+					if (tmpStr.empty()) {
+						// If tmpStr is empty, we might have removed the space before 'c'.
+						// That means we have to recompute the kerning.
+
+						tmpWidth += currentCharWidth + font.getKerningOffset(0, c);
+						tmpStr += c;
+						continue;
+					}
+				} else {
+					wrapper.add(tmpStr, tmpWidth);
+				}
+			}
+
+			tmpWidth += w;
+			tmpStr += c;
 		}
 
-		tmpWidth += w;
-		tmpStr += c;
+		// If some text is left over, add it as the final line
+		line += tmpStr;
+		lineWidth += tmpWidth;
+		if (lineWidth > 0) {
+			wrapper.add(line, lineWidth);
+		}
+	} while (evenWidthLinesModeEnabled
+	         && (targetMaxLineWidth > maxWidth));
+	return wrapper.actualMaxLineWidth;
+}
+
+template<typename StringType>
+StringType handleEllipsis(const Font &font, const StringType &input, int w) {
+	StringType s = input;
+	int width = font.getStringWidth(s);
+	bool hasEllipsisAtEnd = false;
+
+	if (s.size() > 3 && s[s.size() - 1] == '.' && s[s.size() - 2] == '.' && s[s.size() - 3] == '.') {
+		hasEllipsisAtEnd = true;
 	}
 
-	// If some text is left over, add it as the final line
-	line += tmpStr;
-	lineWidth += tmpWidth;
-	if (lineWidth > 0) {
-		wrapper.add(line, lineWidth);
+	if (width > w && hasEllipsisAtEnd) {
+		// String is too wide. Check whether it ends in an ellipsis
+		// ("..."). If so, remove that and try again!
+		s.deleteLastChar();
+		s.deleteLastChar();
+		s.deleteLastChar();
+		width = font.getStringWidth(s);
 	}
-	return wrapper.actualMaxLineWidth;
+
+	if (width > w) {
+		StringType str;
+		StringType ellipsis("...");
+
+		// String is too wide. So we shorten it "intelligently" by
+		// replacing parts of the string by an ellipsis. There are
+		// three possibilities for this: replace the start, the end, or
+		// the middle of the string. What is best really depends on the
+		// context; but unless we want to make this configurable,
+		// replacing the middle seems to be a good compromise.
+
+		const int ellipsisWidth = font.getStringWidth(ellipsis);
+
+		// SLOW algorithm to remove enough of the middle. But it is good enough
+		// for now.
+		const int halfWidth = (w - ellipsisWidth) / 2;
+		int w2 = 0;
+		typename StringType::unsigned_type last = 0;
+		uint i = 0;
+
+		for (; i < s.size(); ++i) {
+			const typename StringType::unsigned_type cur = s[i];
+			int charWidth = font.getCharWidth(cur) + font.getKerningOffset(last, cur);
+			if (w2 + charWidth > halfWidth)
+				break;
+			last = cur;
+			w2 += charWidth;
+			str += cur;
+		}
+
+		// At this point we know that the first 'i' chars are together 'w2'
+		// pixels wide. We took the first i-1, and add "..." to them.
+		str += ellipsis;
+		last = '.';
+
+		// The original string is width wide. Of those we already skipped past
+		// w2 pixels, which means (width - w2) remain.
+		// The new str is (w2+ellipsisWidth) wide, so we can accommodate about
+		// (w - (w2+ellipsisWidth)) more pixels.
+		// Thus we skip ((width - w2) - (w - (w2+ellipsisWidth))) =
+		// (width + ellipsisWidth - w)
+		int skip = width + ellipsisWidth - w;
+		for (; i < s.size() && skip > 0; ++i) {
+			const typename StringType::unsigned_type cur = s[i];
+			skip -= font.getCharWidth(cur) + font.getKerningOffset(last, cur);
+			last = cur;
+		}
+
+		// Append the remaining chars, if any
+		for (; i < s.size(); ++i) {
+			str += s[i];
+		}
+
+		return str;
+	}
+
+	return s;
 }
 
 } // End of anonymous namespace
@@ -261,21 +408,27 @@ Common::Rect Font::getBoundingBox(const Common::String &input, int x, int y, con
 		align = kTextAlignLeft;
 	}
 
-	const Common::String str = useEllipsis ? handleEllipsis(input, w) : input;
+	const Common::String str = useEllipsis ? handleEllipsis(*this, input, w) : input;
 	return getBoundingBoxImpl(*this, str, x, y, w, align, deltax);
 }
 
-Common::Rect Font::getBoundingBox(const Common::U32String &str, int x, int y, const int w, TextAlign align) const {
+Common::Rect Font::getBoundingBox(const Common::U32String &input, int x, int y, const int w, TextAlign align, int deltax, bool useEllipsis) const {
 	// In case no width was given we cannot any alignment apart from left
 	// alignment.
 	if (w == 0) {
+		if (useEllipsis) {
+			warning("Font::getBoundingBox: Requested ellipsis when no width was specified");
+		}
+
 		if (align != kTextAlignLeft) {
 			warning("Font::getBoundingBox: Requested text alignment when no width was specified");
 		}
 
+		useEllipsis = false;
 		align = kTextAlignLeft;
 	}
 
+	const Common::U32String str = useEllipsis ? handleEllipsis(*this, input, w) : input;
 	return getBoundingBoxImpl(*this, str, x, y, w, align, 0);
 }
 
@@ -296,12 +449,13 @@ void Font::drawChar(ManagedSurface *dst, uint32 chr, int x, int y, uint32 color)
 }
 
 void Font::drawString(Surface *dst, const Common::String &str, int x, int y, int w, uint32 color, TextAlign align, int deltax, bool useEllipsis) const {
-	Common::String renderStr = useEllipsis ? handleEllipsis(str, w) : str;
+	Common::String renderStr = useEllipsis ? handleEllipsis(*this, str, w) : str;
 	drawStringImpl(*this, dst, renderStr, x, y, w, color, align, deltax);
 }
 
-void Font::drawString(Surface *dst, const Common::U32String &str, int x, int y, int w, uint32 color, TextAlign align, int deltax) const {
-	drawStringImpl(*this, dst, str, x, y, w, color, align, deltax);
+void Font::drawString(Surface *dst, const Common::U32String &str, int x, int y, int w, uint32 color, TextAlign align, int deltax, bool useEllipsis) const {
+	Common::U32String renderStr = useEllipsis ? handleEllipsis(*this, str, w) : str;
+	drawStringImpl(*this, dst, renderStr, x, y, w, color, align, deltax);
 }
 
 void Font::drawString(ManagedSurface *dst, const Common::String &str, int x, int y, int w, uint32 color, TextAlign align, int deltax, bool useEllipsis) const {
@@ -311,89 +465,29 @@ void Font::drawString(ManagedSurface *dst, const Common::String &str, int x, int
 	}
 }
 
-void Font::drawString(ManagedSurface *dst, const Common::U32String &str, int x, int y, int w, uint32 color, TextAlign align, int deltax) const {
-	drawString(&dst->_innerSurface, str, x, y, w, color, align, deltax);
+void Font::drawString(ManagedSurface *dst, const Common::U32String &str, int x, int y, int w, uint32 color, TextAlign align, int deltax, bool useEllipsis) const {
+	drawString(&dst->_innerSurface, str, x, y, w, color, align, deltax, useEllipsis);
 	if (w != 0) {
-		dst->addDirtyRect(getBoundingBox(str, x, y, w, align));
+		dst->addDirtyRect(getBoundingBox(str, x, y, w, align, useEllipsis));
 	}
 }
 
-int Font::wordWrapText(const Common::String &str, int maxWidth, Common::Array<Common::String> &lines, int initWidth) const {
-	return wordWrapTextImpl(*this, str, maxWidth, lines, initWidth);
+int Font::wordWrapText(const Common::String &str, int maxWidth, Common::Array<Common::String> &lines, int initWidth, bool evenWidthLinesModeEnabled, bool wrapOnExplicitNewLines) const {
+	return wordWrapTextImpl(*this, str, maxWidth, lines, initWidth, evenWidthLinesModeEnabled, wrapOnExplicitNewLines);
 }
 
-int Font::wordWrapText(const Common::U32String &str, int maxWidth, Common::Array<Common::U32String> &lines, int initWidth) const {
-	return wordWrapTextImpl(*this, str, maxWidth, lines, initWidth);
+int Font::wordWrapText(const Common::U32String &str, int maxWidth, Common::Array<Common::U32String> &lines, int initWidth, bool evenWidthLinesModeEnabled, bool wrapOnExplicitNewLines) const {
+	return wordWrapTextImpl(*this, str, maxWidth, lines, initWidth, evenWidthLinesModeEnabled, wrapOnExplicitNewLines);
 }
 
-Common::String Font::handleEllipsis(const Common::String &input, int w) const {
-	Common::String s = input;
-	int width = getStringWidth(s);
-
-	if (width > w && s.hasSuffix("...")) {
-		// String is too wide. Check whether it ends in an ellipsis
-		// ("..."). If so, remove that and try again!
-		s.deleteLastChar();
-		s.deleteLastChar();
-		s.deleteLastChar();
-		width = getStringWidth(s);
-	}
-
-	if (width > w) {
-		Common::String str;
-
-		// String is too wide. So we shorten it "intelligently" by
-		// replacing parts of the string by an ellipsis. There are
-		// three possibilities for this: replace the start, the end, or
-		// the middle of the string. What is best really depends on the
-		// context; but unless we want to make this configurable,
-		// replacing the middle seems to be a good compromise.
-
-		const int ellipsisWidth = getStringWidth("...");
-
-		// SLOW algorithm to remove enough of the middle. But it is good enough
-		// for now.
-		const int halfWidth = (w - ellipsisWidth) / 2;
-		int w2 = 0;
-		Common::String::unsigned_type last = 0;
-		uint i = 0;
-
-		for (; i < s.size(); ++i) {
-			const Common::String::unsigned_type cur = s[i];
-			int charWidth = getCharWidth(cur) + getKerningOffset(last, cur);
-			if (w2 + charWidth > halfWidth)
-				break;
-			last = cur;
-			w2 += charWidth;
-			str += cur;
-		}
-
-		// At this point we know that the first 'i' chars are together 'w2'
-		// pixels wide. We took the first i-1, and add "..." to them.
-		str += "...";
-		last = '.';
-
-		// The original string is width wide. Of those we already skipped past
-		// w2 pixels, which means (width - w2) remain.
-		// The new str is (w2+ellipsisWidth) wide, so we can accommodate about
-		// (w - (w2+ellipsisWidth)) more pixels.
-		// Thus we skip ((width - w2) - (w - (w2+ellipsisWidth))) =
-		// (width + ellipsisWidth - w)
-		int skip = width + ellipsisWidth - w;
-		for (; i < s.size() && skip > 0; ++i) {
-			const Common::String::unsigned_type cur = s[i];
-			skip -= getCharWidth(cur) + getKerningOffset(last, cur);
-			last = cur;
-		}
-
-		// Append the remaining chars, if any
-		for (; i < s.size(); ++i) {
-			str += s[i];
-		}
-
-		return str;
-	} else {
-		return s;
+TextAlign convertTextAlignH(TextAlign alignH, bool rtl) {
+	switch (alignH) {
+	case kTextAlignStart:
+		return rtl ? kTextAlignRight : kTextAlignLeft;
+	case kTextAlignEnd:
+		return rtl ? kTextAlignLeft : kTextAlignRight;
+	default:
+		return alignH;
 	}
 }
 

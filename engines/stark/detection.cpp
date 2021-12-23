@@ -21,20 +21,14 @@
  */
 
 #include "engines/advancedDetector.h"
-#include "engines/stark/savemetadata.h"
-#include "engines/stark/stark.h"
-#include "engines/stark/services/stateprovider.h"
 
-#include "common/savefile.h"
-#include "common/system.h"
 #include "common/translation.h"
 
 namespace Stark {
 
 static const PlainGameDescriptor starkGames[] = {
-	{"stark", "Stark Game"},
-	{"tlj", "The Longest Journey"},
-	{nullptr, nullptr}
+	{ "tlj", "The Longest Journey" },
+	{ nullptr, nullptr }
 };
 
 static const ADGameDescription gameDescriptions[] = {
@@ -48,7 +42,7 @@ static const ADGameDescription gameDescriptions[] = {
 		},
 		Common::EN_ANY,
 		Common::kPlatformWindows,
-		ADGF_UNSTABLE,
+		ADGF_NO_FLAGS,
 		GUIO_NONE
 	},
 
@@ -62,7 +56,7 @@ static const ADGameDescription gameDescriptions[] = {
 		},
 		Common::EN_ANY,
 		Common::kPlatformWindows,
-		ADGF_UNSTABLE,
+		ADGF_NO_FLAGS,
 		GUIO_NONE
 	},
 
@@ -76,7 +70,7 @@ static const ADGameDescription gameDescriptions[] = {
 		},
 		Common::EN_ANY,
 		Common::kPlatformWindows,
-		ADGF_DEMO | ADGF_UNSTABLE,
+		ADGF_DEMO,
 		GUIO_NONE
 	},
 
@@ -90,7 +84,7 @@ static const ADGameDescription gameDescriptions[] = {
 		},
 		Common::EN_ANY,
 		Common::kPlatformWindows,
-		ADGF_DEMO | ADGF_UNSTABLE,
+		ADGF_DEMO,
 		GUIO_NONE
 	},
 
@@ -104,7 +98,7 @@ static const ADGameDescription gameDescriptions[] = {
 		},
 		Common::FR_FRA,
 		Common::kPlatformWindows,
-		ADGF_DEMO | ADGF_UNSTABLE,
+		ADGF_DEMO,
 		GUIO_NONE
 	},
 
@@ -118,7 +112,7 @@ static const ADGameDescription gameDescriptions[] = {
 		},
 		Common::NB_NOR,
 		Common::kPlatformWindows,
-		ADGF_DEMO | ADGF_UNSTABLE,
+		ADGF_DEMO,
 		GUIO_NONE
 	},
 
@@ -132,7 +126,7 @@ static const ADGameDescription gameDescriptions[] = {
 		},
 		Common::NB_NOR,
 		Common::kPlatformWindows,
-		ADGF_UNSTABLE,
+		ADGF_NO_FLAGS,
 		GUIO_NONE
 	},
 
@@ -146,7 +140,7 @@ static const ADGameDescription gameDescriptions[] = {
 		},
 		Common::NB_NOR,
 		Common::kPlatformWindows,
-		ADGF_UNSTABLE,
+		ADGF_NO_FLAGS,
 		GUIO_NONE
 	},
 
@@ -160,7 +154,7 @@ static const ADGameDescription gameDescriptions[] = {
 		},
 		Common::DE_DEU,
 		Common::kPlatformWindows,
-		ADGF_UNSTABLE,
+		ADGF_NO_FLAGS,
 		GUIO_NONE
 	},
 
@@ -174,7 +168,7 @@ static const ADGameDescription gameDescriptions[] = {
 		},
 		Common::DE_DEU,
 		Common::kPlatformWindows,
-		ADGF_UNSTABLE,
+		ADGF_NO_FLAGS,
 		GUIO_NONE
 	},
 	
@@ -188,7 +182,7 @@ static const ADGameDescription gameDescriptions[] = {
 		},
 		Common::IT_ITA,
 		Common::kPlatformWindows,
-		ADGF_UNSTABLE,
+		ADGF_NO_FLAGS,
 		GUIO_NONE
 	},
 
@@ -202,7 +196,7 @@ static const ADGameDescription gameDescriptions[] = {
 		},
 		Common::IT_ITA,
 		Common::kPlatformWindows,
-		ADGF_UNSTABLE,
+		ADGF_NO_FLAGS,
 		GUIO_NONE
 	},
 
@@ -216,7 +210,7 @@ static const ADGameDescription gameDescriptions[] = {
 		},
 		Common::NL_NLD,
 		Common::kPlatformWindows,
-		ADGF_UNSTABLE,
+		ADGF_NO_FLAGS,
 		GUIO_NONE
 	},
 
@@ -230,7 +224,7 @@ static const ADGameDescription gameDescriptions[] = {
 		},
 		Common::ES_ESP,
 		Common::kPlatformWindows,
-		ADGF_UNSTABLE,
+		ADGF_NO_FLAGS,
 		GUIO_NONE
 	},
 
@@ -244,7 +238,7 @@ static const ADGameDescription gameDescriptions[] = {
 		},
 		Common::FR_FRA,
 		Common::kPlatformWindows,
-		ADGF_UNSTABLE,
+		ADGF_NO_FLAGS,
 		GUIO_NONE
 	},
 
@@ -258,7 +252,7 @@ static const ADGameDescription gameDescriptions[] = {
 		},
 		Common::FR_FRA,
 		Common::kPlatformWindows,
-		ADGF_UNSTABLE,
+		ADGF_NO_FLAGS,
 		GUIO_NONE
 	},
 
@@ -272,7 +266,7 @@ static const ADGameDescription gameDescriptions[] = {
 		},
 		Common::SE_SWE,
 		Common::kPlatformWindows,
-		ADGF_DEMO | ADGF_UNSTABLE,
+		ADGF_DEMO,
 		GUIO_NONE
 	},
 
@@ -286,7 +280,7 @@ static const ADGameDescription gameDescriptions[] = {
 		},
 		Common::SE_SWE,
 		Common::kPlatformWindows,
-		ADGF_UNSTABLE,
+		ADGF_NO_FLAGS,
 		GUIO_NONE
 	},
 
@@ -300,7 +294,7 @@ static const ADGameDescription gameDescriptions[] = {
 		},
 		Common::SE_SWE,
 		Common::kPlatformWindows,
-		ADGF_UNSTABLE,
+		ADGF_NO_FLAGS,
 		GUIO_NONE
 	},
 
@@ -314,7 +308,7 @@ static const ADGameDescription gameDescriptions[] = {
 		},
 		Common::PL_POL,
 		Common::kPlatformWindows,
-		ADGF_UNSTABLE,
+		ADGF_NO_FLAGS,
 		GUIO_NONE
 	},
 
@@ -328,15 +322,16 @@ static const ADGameDescription gameDescriptions[] = {
 		},
 		Common::RU_RUS,
 		Common::kPlatformWindows,
-		ADGF_UNSTABLE,
+		ADGF_NO_FLAGS,
 		GUIO_NONE
 	},
 
 	AD_TABLE_END_MARKER
 };
 
-#define GAMEOPTION_ASSETS_MOD       GUIO_GAMEOPTIONS1
-#define GAMEOPTION_LINEAR_FILTERING GUIO_GAMEOPTIONS2
+#define GAMEOPTION_ASSETS_MOD        GUIO_GAMEOPTIONS1
+#define GAMEOPTION_LINEAR_FILTERING  GUIO_GAMEOPTIONS2
+#define GAMEOPTION_FONT_ANTIALIASING GUIO_GAMEOPTIONS3
 
 static const ADExtraGuiOptionsMap optionsList[] = {
 	{
@@ -357,122 +352,38 @@ static const ADExtraGuiOptionsMap optionsList[] = {
 			true
 		}
 	},
+	{
+		GAMEOPTION_FONT_ANTIALIASING,
+		{
+			_s("Enable font anti-aliasing"),
+			_s("When font anti-aliasing is enabled, the text is smoother."),
+			"enable_font_antialiasing",
+			true
+		}
+	},
 
 	AD_EXTRA_GUI_OPTIONS_TERMINATOR
 };
 
-class StarkMetaEngine : public AdvancedMetaEngine {
+class StarkMetaEngineStatic : public AdvancedMetaEngineStatic {
 public:
-	StarkMetaEngine() : AdvancedMetaEngine(gameDescriptions, sizeof(ADGameDescription), starkGames, optionsList) {
-		_singleId = "stark";
-		_guiOptions = GUIO3(GUIO_NOMIDI, GAMEOPTION_ASSETS_MOD, GAMEOPTION_LINEAR_FILTERING);
+	StarkMetaEngineStatic() : AdvancedMetaEngineStatic(gameDescriptions, sizeof(ADGameDescription), starkGames, optionsList) {
+		_guiOptions = GUIO4(GUIO_NOMIDI, GAMEOPTION_ASSETS_MOD, GAMEOPTION_LINEAR_FILTERING, GAMEOPTION_FONT_ANTIALIASING);
 	}
 
 	const char *getName() const override {
-		return "Stark Engine";
+		return "Stark";
+	}
+
+	const char *getEngineId() const override {
+		return "stark";
 	}
 
 	const char *getOriginalCopyright() const override {
 		return "(C) Funcom";
 	}
-
-	bool hasFeature(MetaEngineFeature f) const override {
-		return
-			(f == kSupportsListSaves) ||
-			(f == kSupportsLoadingDuringStartup) ||
-			(f == kSupportsDeleteSave) ||
-			(f == kSavesSupportThumbnail) ||
-			(f == kSavesSupportMetaInfo) ||
-			(f == kSavesSupportPlayTime) ||
-			(f == kSavesSupportCreationDate);
-	}
-
-	int getMaximumSaveSlot() const override {
-		return 999;
-	}
-
-	SaveStateList listSaves(const char *target) const override {
-		Common::String pattern = Common::String::format("%s-###.tlj", target);
-		Common::StringArray filenames = g_system->getSavefileManager()->listSavefiles(pattern);
-
-		int targetLen = strlen(target);
-
-		SaveStateList saveList;
-		for (Common::StringArray::const_iterator filename = filenames.begin(); filename != filenames.end(); ++filename) {
-			// Extract the slot number from the filename
-			char slot[4];
-			slot[0] = (*filename)[targetLen + 1];
-			slot[1] = (*filename)[targetLen + 2];
-			slot[2] = (*filename)[targetLen + 3];
-			slot[3] = '\0';
-
-			// Read the description from the save
-			Common::String description;
-			Common::InSaveFile *save = g_system->getSavefileManager()->openForLoading(*filename);
-			if (save) {
-				StateReadStream stream(save);
-				description = stream.readString();
-			}
-
-			saveList.push_back(SaveStateDescriptor(atoi(slot), description));
-		}
-
-		Common::sort(saveList.begin(), saveList.end(), SaveStateDescriptorSlotComparator());
-		return saveList;
-	}
-
-	SaveStateDescriptor querySaveMetaInfos(const char *target, int slot) const override {
-		SaveStateDescriptor descriptor;
-		if (slot == 0) {
-			descriptor.setWriteProtectedFlag(true);
-			descriptor.setDeletableFlag(false);
-		}
-
-		Common::String filename = StarkEngine::formatSaveName(target, slot);
-		Common::InSaveFile *save = g_system->getSavefileManager()->openForLoading(filename);
-		if (!save) {
-			return descriptor;
-		}
-
-		SaveMetadata metadata;
-		Common::ErrorCode readError = metadata.read(save, filename);
-		if (readError != Common::kNoError) {
-			delete save;
-			return descriptor;
-		}
-
-		descriptor.setDescription(metadata.description);
-
-		if (metadata.version >= 9) {
-			Graphics::Surface *thumb = metadata.readGameScreenThumbnail(save);
-			descriptor.setThumbnail(thumb);
-			descriptor.setPlayTime(metadata.totalPlayTime);
-			descriptor.setSaveDate(metadata.saveYear, metadata.saveMonth, metadata.saveDay);
-			descriptor.setSaveTime(metadata.saveHour, metadata.saveMinute);
-		}
-
-		delete save;
-
-		return descriptor;
-	}
-
-	void removeSaveState(const char *target, int slot) const override {
-		Common::String filename = StarkEngine::formatSaveName(target, slot);
-		g_system->getSavefileManager()->removeSavefile(filename);
-	}
-
-	bool createInstance(OSystem *syst, Engine **engine, const ADGameDescription *desc) const override {
-		if (desc)
-			*engine = new StarkEngine(syst, desc);
-
-		return desc != nullptr;
-	}
 };
 
 } // End of namespace Stark
 
-#if PLUGIN_ENABLED_DYNAMIC(STARK)
-	REGISTER_PLUGIN_DYNAMIC(STARK, PLUGIN_TYPE_ENGINE, Stark::StarkMetaEngine);
-#else
-	REGISTER_PLUGIN_STATIC(STARK, PLUGIN_TYPE_ENGINE, Stark::StarkMetaEngine);
-#endif
+REGISTER_PLUGIN_STATIC(STARK_DETECTION, PLUGIN_TYPE_METAENGINE, Stark::StarkMetaEngineStatic);

@@ -36,8 +36,11 @@ enum {
 
 class TabWidget : public Widget {
 	typedef Common::String String;
+	typedef Common::U32String U32String;
+
 	struct Tab {
-		String title;
+		U32String title;
+		String dialogName;
 		Widget *firstWidget;
 		int _tabWidth;
 	};
@@ -60,11 +63,12 @@ protected:
 
 	ButtonWidget *_navLeft, *_navRight;
 	bool _navButtonsVisible;
+	int _lastRead;
 
 public:
 	TabWidget(GuiObject *boss, int x, int y, int w, int h);
 	TabWidget(GuiObject *boss, const String &name);
-	~TabWidget();
+	~TabWidget() override;
 
 	void init();
 
@@ -72,7 +76,7 @@ public:
 	 * Add a new tab with the given title. Returns a unique ID which can be used
 	 * to identify the tab (to remove it / activate it etc.).
 	 */
-	int addTab(const String &title);
+	int addTab(const U32String &title, const String &dialogName);
 
 	/**
 	 * Remove the tab with the given tab ID. Disposes all child widgets of that tab.
@@ -96,20 +100,22 @@ public:
 	 */
 	void setActiveTab(int tabID);
 
-	void setTabTitle(int tabID, const String &title) {
+	void setTabTitle(int tabID, const U32String &title) {
 		assert(0 <= tabID && tabID < (int)_tabs.size());
 		_tabs[tabID].title = title;
 	}
 
-	virtual void handleMouseDown(int x, int y, int button, int clickCount) override;
-	virtual bool handleKeyDown(Common::KeyState state) override;
-	virtual void handleCommand(CommandSender *sender, uint32 cmd, uint32 data) override;
+	void handleMouseDown(int x, int y, int button, int clickCount) override;
+	void handleMouseMoved(int x, int y, int button) override;
+	void handleMouseLeft(int button) override { _lastRead = -1; };
+	bool handleKeyDown(Common::KeyState state) override;
+	void handleCommand(CommandSender *sender, uint32 cmd, uint32 data) override;
 	virtual int getFirstVisible() const;
 	virtual void setFirstVisible(int tabID, bool adjustIfRoom = false);
 
-	virtual bool containsWidget(Widget *) const override;
+	bool containsWidget(Widget *) const override;
 
-	virtual void reflowLayout() override;
+	void reflowLayout() override;
 
 	void draw() override;
 	void markAsDirty() override;
@@ -117,12 +123,12 @@ public:
 protected:
 	// We overload getChildY to make sure child widgets are positioned correctly.
 	// Essentially this compensates for the space taken up by the tab title header.
-	virtual int16 getChildY() const override;
-	virtual uint16 getHeight() const override;
+	int16 getChildY() const override;
+	uint16 getHeight() const override;
 
-	virtual void drawWidget() override;
+	void drawWidget() override;
 
-	virtual Widget *findWidget(int x, int y) override;
+	Widget *findWidget(int x, int y) override;
 
 	virtual void adjustTabs(int value);
 

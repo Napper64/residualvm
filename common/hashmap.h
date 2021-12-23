@@ -57,6 +57,15 @@
 
 namespace Common {
 
+/**
+ * @defgroup common_hashmap Hash table (HashMap)
+ * @ingroup common
+ *
+ * @brief API for operations on a hash table.
+ *
+ * @{
+ */
+
 // The sgi IRIX MIPSpro Compiler has difficulties with nested templates.
 // This and the other __sgi conditionals below work around these problems.
 // The Intel C++ Compiler suffers from the same problems.
@@ -88,8 +97,8 @@ private:
 	typedef HashMap<Key, Val, HashFunc, EqualFunc> HM_t;
 
 	struct Node {
-		const Key _key;
 		Val _value;
+		const Key _key;
 		explicit Node(const Key &key) : _key(key), _value() {}
 		Node() : _key(), _value() {}
 	};
@@ -113,6 +122,9 @@ private:
 	ObjectPool<Node, HASHMAP_MEMORYPOOL_SIZE> _nodePool;
 #endif
 
+	/** Default value, returned by the const getVal. */
+	Val _defaultVal;
+
 	Node **_storage;	///< hashtable of size arrsize.
 	size_type _mask;		///< Capacity of the HashMap minus one; must be a power of two of minus one
 	size_type _size;
@@ -120,9 +132,6 @@ private:
 
 	HashFunc _hash;
 	EqualFunc _equal;
-
-	/** Default value, returned by the const getVal. */
-	const Val _defaultVal;
 
 	/** Dummy node, used as marker for erased objects. */
 	#define HASHMAP_DUMMY_NODE	((Node *)1)
@@ -304,15 +313,7 @@ public:
  * Base constructor, creates an empty hashmap.
  */
 template<class Key, class Val, class HashFunc, class EqualFunc>
-HashMap<Key, Val, HashFunc, EqualFunc>::HashMap()
-//
-// We have to skip _defaultVal() on PS2 to avoid gcc 3.2.2 ICE
-//
-#ifdef __PLAYSTATION2__
-	{
-#else
-	: _defaultVal() {
-#endif
+HashMap<Key, Val, HashFunc, EqualFunc>::HashMap() : _defaultVal() {
 	_mask = HASHMAP_MIN_CAPACITY - 1;
 	_storage = new Node *[HASHMAP_MIN_CAPACITY];
 	assert(_storage != nullptr);
@@ -631,6 +632,8 @@ void HashMap<Key, Val, HashFunc, EqualFunc>::erase(const Key &key) {
 }
 
 #undef HASHMAP_DUMMY_NODE
+
+/** @} */
 
 } // End of namespace Common
 

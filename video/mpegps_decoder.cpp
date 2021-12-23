@@ -21,13 +21,13 @@
  */
 
 #include "audio/audiostream.h"
-#include "audio/decoders/raw.h" // ResidualVM
+#include "audio/decoders/raw.h"
 #include "audio/decoders/ac3.h"
 #include "audio/decoders/mp3.h"
 #include "common/debug.h"
 #include "common/endian.h"
 #include "common/stream.h"
-#include "common/memstream.h" // ResidualVM
+#include "common/memstream.h"
 #include "common/system.h"
 #include "common/textconsole.h"
 
@@ -52,7 +52,8 @@ enum {
 	kStartCodePrivateStream2 = 0x1BF
 };
 
-MPEGPSDecoder::MPEGPSDecoder() {
+MPEGPSDecoder::MPEGPSDecoder(double decibel) {
+	_decibel = decibel;
 	_demuxer = new MPEGPSDemuxer();
 }
 
@@ -106,7 +107,7 @@ MPEGPSDecoder::MPEGStream *MPEGPSDecoder::getStream(uint32 startCode, Common::Se
 
 #ifdef USE_A52
 				handled = true;
-				AC3AudioTrack *ac3Track = new AC3AudioTrack(*packet, getSoundType());
+				AC3AudioTrack *ac3Track = new AC3AudioTrack(*packet, _decibel, getSoundType());
 				stream = ac3Track;
 				_streamMap[startCode] = ac3Track;
 				addTrack(ac3Track);
@@ -119,10 +120,8 @@ MPEGPSDecoder::MPEGStream *MPEGPSDecoder::getStream(uint32 startCode, Common::Se
 			case kPrivateStreamDVDPCM:
 				typeName = "DVD PCM";
 				break;
-			// ResidualVM start
 			case kPrivateStreamPS2Audio: {
 				typeName = "PS2 Audio";
-
 				handled = true;
 				PS2AudioTrack *audioTrack = new PS2AudioTrack(packet, getSoundType());
 				stream = audioTrack;
@@ -130,7 +129,6 @@ MPEGPSDecoder::MPEGStream *MPEGPSDecoder::getStream(uint32 startCode, Common::Se
 				addTrack(audioTrack);
 				break;
 			}
-			// ResidualVM end
 			default:
 				typeName = "Unknown";
 				break;
@@ -232,6 +230,8 @@ MPEGPSDecoder::PrivateStreamType MPEGPSDecoder::detectPrivateStreamType(Common::
 		return kPrivateStreamAC3;
 	case 0xA0:
 		return kPrivateStreamDVDPCM;
+	default:
+		break;
 	}
 
 	return kPrivateStreamUnknown;
@@ -310,7 +310,7 @@ Common::SeekableReadStream *MPEGPSDecoder::MPEGPSDemuxer::getNextPacket(uint32 c
 		bool usePacket = false;
 
 		if (packet._pts == 0xFFFFFFFF) {
-			// No timestamp? Use it just in case. This could be a 
+			// No timestamp? Use it just in case. This could be a
 			// bad idea, but in my tests all audio packets have a
 			// time stamp.
 			usePacket = true;
@@ -376,7 +376,7 @@ bool MPEGPSDecoder::MPEGPSDemuxer::queueNextPacket() {
 			return true;
 		}
 
-		delete _stream;
+		delete stream;
 	}
 }
 
@@ -715,9 +715,9 @@ Audio::AudioStream *MPEGPSDecoder::MPEGAudioTrack::getAudioStream() const {
 
 #ifdef USE_A52
 
-MPEGPSDecoder::AC3AudioTrack::AC3AudioTrack(Common::SeekableReadStream &firstPacket, Audio::Mixer::SoundType soundType) :
+MPEGPSDecoder::AC3AudioTrack::AC3AudioTrack(Common::SeekableReadStream &firstPacket, double decibel, Audio::Mixer::SoundType soundType) :
 		AudioTrack(soundType) {
-	_audStream = Audio::makeAC3Stream(firstPacket);
+	_audStream = Audio::makeAC3Stream(firstPacket, decibel);
 	if (!_audStream)
 		error("Could not create AC-3 stream");
 }
@@ -742,7 +742,6 @@ Audio::AudioStream *MPEGPSDecoder::AC3AudioTrack::getAudioStream() const {
 
 #endif
 
-// ResidualVM specific start
 MPEGPSDecoder::PS2AudioTrack::PS2AudioTrack(Common::SeekableReadStream *firstPacket, Audio::Mixer::SoundType soundType) :
 		AudioTrack(soundType) {
 	firstPacket->seek(12); // unknown data (4), 'SShd', header size (4)
@@ -854,6 +853,4 @@ uint32 MPEGPSDecoder::PS2AudioTrack::calculateSampleCount(uint32 packetSize) con
 
 	return result * _channels;
 }
-// ResidualVM specific end
-
 } // End of namespace Video

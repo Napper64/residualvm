@@ -24,11 +24,23 @@
 #define COMMON_DIALOG_MANAGER_H
 
 #include "common/scummsys.h"
-#include "common/fs.h"
 
 #if defined(USE_SYSDIALOGS)
 
+#include "common/fs.h"
+#include "common/system.h"
+#include "common/events.h"
+
 namespace Common {
+
+/**
+ * @defgroup common_dialogs Dialog Manager
+ * @ingroup common
+ *
+ * @brief  The Dialog Manager allows GUI code to interact with native system dialogs.
+ *
+ * @{
+ */
 
 /**
  * The DialogManager allows GUI code to interact with native system dialogs.
@@ -44,7 +56,7 @@ public:
 		kDialogOk = 1		///< User confirmed the dialog (OK/Yes buttons)
 	};
 
-	DialogManager() {}
+	DialogManager() : _wasFullscreen(false) {}
 	virtual ~DialogManager() {}
 
 	/**
@@ -55,8 +67,46 @@ public:
 	 * @param isDirBrowser Restrict selection to directories
 	 * @return The dialog result
 	 */
-	virtual DialogResult showFileBrowser(const char *title, FSNode &choice, bool isDirBrowser = false) { return kDialogError; }
+	virtual DialogResult showFileBrowser(const Common::U32String &title, FSNode &choice, bool isDirBrowser = false) { return kDialogError; }
+
+protected:
+	bool _wasFullscreen;
+
+	/**
+	 * Call before opening a dialog.
+	 */
+	void beginDialog() {
+		// If we were in fullscreen mode, switch back
+		_wasFullscreen = g_system->getFeatureState(OSystem::kFeatureFullscreenMode);
+		if (_wasFullscreen) {
+			g_system->beginGFXTransaction();
+			g_system->setFeatureState(OSystem::kFeatureFullscreenMode, false);
+			g_system->endGFXTransaction();
+		}
+	}
+
+	/**
+	 * Call after closing a dialog.
+	 */
+	void endDialog() {
+		// While the native file browser is open, any input events (e.g. keypresses) are
+		// still received by the application. With SDL backend for example this results in the
+		// events beeing queued and processed after we return, thus dispatching events that were
+		// intended for the native file browser. For example: pressing Esc to cancel the native
+		// file browser would cause the application to quit in addition to closing the
+		// file browser. To avoid this happening clear all pending events.
+		g_system->getEventManager()->getEventDispatcher()->clearEvents();
+
+		// If we were in fullscreen mode, switch back
+		if (_wasFullscreen) {
+			g_system->beginGFXTransaction();
+			g_system->setFeatureState(OSystem::kFeatureFullscreenMode, true);
+			g_system->endGFXTransaction();
+		}
+	}
 };
+
+/** @} */
 
 } // End of namespace Common
 

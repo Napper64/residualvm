@@ -21,13 +21,14 @@
  */
 
 #include "gui/KeysDialog.h"
+
+#ifdef GUI_ENABLE_KEYSDIALOG
+
+#warning The actions system is deprecated. Please use the keymapper instead.
+
 #include "gui/Actions.h"
 #include "common/translation.h"
 #include <SDL_keyboard.h>
-
-#ifdef _WIN32_WCE
-#include "CEDevice.h"
-#endif
 
 namespace GUI {
 
@@ -35,12 +36,12 @@ enum {
 	kMapCmd	= 'map '
 };
 
-KeysDialog::KeysDialog(const Common::String &title)
+KeysDialog::KeysDialog(const Common::U32String &title)
 	: GUI::Dialog("KeysDialog") {
 
-	new ButtonWidget(this, "KeysDialog.Map", _("Map"), 0, kMapCmd);
-	new ButtonWidget(this, "KeysDialog.Ok", _("OK"), 0, kOKCmd);
-	new ButtonWidget(this, "KeysDialog.Cancel", _("Cancel"), 0, kCloseCmd);
+	new ButtonWidget(this, "KeysDialog.Map", _("Map"), Common::U32String(""), kMapCmd);
+	new ButtonWidget(this, "KeysDialog.Ok", _("OK"), Common::U32String(""), kOKCmd);
+	new ButtonWidget(this, "KeysDialog.Cancel", _("Cancel"), Common::U32String(""), kCloseCmd);
 
 	_actionsList = new ListWidget(this, "KeysDialog.List");
 	_actionsList->setNumberingMode(kListNumberingZero);
@@ -68,7 +69,7 @@ void KeysDialog::handleCommand(CommandSender *sender, uint32 cmd, uint32 data) {
 
 	case kListSelectionChangedCmd:
 		if (_actionsList->getSelected() >= 0) {
-			Common::String selection;
+			Common::U32String selection;
 
 			uint16 key = Actions::Instance()->getMapping(_actionsList->getSelected());
 #ifdef __SYMBIAN32__
@@ -77,9 +78,9 @@ void KeysDialog::handleCommand(CommandSender *sender, uint32 cmd, uint32 data) {
 				key = key - Common::ASCII_F1 + SDLK_F1;
 #endif
 			if (key != 0)
-				selection = Common::String::format(_("Associated key : %s"), SDL_GetKeyName((SDLKey)key));
+				selection = Common::U32String::format(_("Associated key : %s"), SDL_GetKeyName((SDLKey)key));
 			else
-				selection = Common::String::format(_("Associated key : none"));
+				selection = Common::U32String::format(_("Associated key : none"));
 
 			_keyMapping->setLabel(selection);
 			_keyMapping->markAsDirty();
@@ -89,7 +90,7 @@ void KeysDialog::handleCommand(CommandSender *sender, uint32 cmd, uint32 data) {
 		if (_actionsList->getSelected() < 0) {
 			_actionTitle->setLabel(_("Please select an action"));
 		} else {
-			Common::String selection;
+			Common::U32String selection;
 
 			_actionSelected = _actionsList->getSelected();
 			uint16 key = Actions::Instance()->getMapping(_actionSelected);
@@ -99,9 +100,9 @@ void KeysDialog::handleCommand(CommandSender *sender, uint32 cmd, uint32 data) {
 				key = key - Common::ASCII_F1 + SDLK_F1;
 #endif
 			if (key != 0)
-				selection = Common::String::format(_("Associated key : %s"), SDL_GetKeyName((SDLKey)key));
+				selection = Common::U32String::format(_("Associated key : %s"), SDL_GetKeyName((SDLKey)key));
 			else
-				selection = Common::String::format(_("Associated key : none"));
+				selection = Common::U32String::format(_("Associated key : none"));
 
 			_actionTitle->setLabel(_("Press the key to associate"));
 			_keyMapping->setLabel(selection);
@@ -128,19 +129,15 @@ void KeysDialog::handleKeyDown(Common::KeyState state){
 }
 
 void KeysDialog::handleKeyUp(Common::KeyState state) {
-#ifdef __SYMBIAN32__
 	if (Actions::Instance()->mappingActive()) {
-#else
-	if (state.flags == 0xff  && Actions::Instance()->mappingActive()) {	// GAPI key was selected
-#endif
-		Common::String selection;
+		Common::U32String selection;
 
 		Actions::Instance()->setMapping((ActionType)_actionSelected, state.ascii);
 
 		if (state.ascii != 0)
-			selection = Common::String::format(_("Associated key : %s"), SDL_GetKeyName((SDLKey) state.keycode));
+			selection = Common::U32String::format(_("Associated key : %s"), SDL_GetKeyName((SDLKey) state.keycode));
 		else
-			selection = Common::String::format(_("Associated key : none"));
+			selection = Common::U32String::format(_("Associated key : none"));
 
 		_actionTitle->setLabel(_("Choose an action to map"));
 		_keyMapping->setLabel(selection);
@@ -154,3 +151,5 @@ void KeysDialog::handleKeyUp(Common::KeyState state) {
 }
 
 } // namespace GUI
+
+#endif

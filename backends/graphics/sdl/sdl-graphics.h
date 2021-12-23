@@ -23,22 +23,25 @@
 #ifndef BACKENDS_GRAPHICS_SDL_SDLGRAPHICS_H
 #define BACKENDS_GRAPHICS_SDL_SDLGRAPHICS_H
 
-#include "backends/graphics/graphics.h"
+#include "backends/graphics/windowed.h"
 #include "backends/platform/sdl/sdl-window.h"
 
+#include "common/events.h"
 #include "common/rect.h"
 
 class SdlEventSource;
 
+#ifndef __SYMBIAN32__
+#define USE_OSD	1
+#endif
+
 /**
  * Base class for a SDL based graphics manager.
- *
- * It features a few extra a few extra features required by SdlEventSource.
  */
-class SdlGraphicsManager : virtual public GraphicsManager {
+class SdlGraphicsManager : virtual public WindowedGraphicsManager, public Common::EventObserver {
 public:
 	SdlGraphicsManager(SdlEventSource *source, SdlWindow *window);
-	virtual ~SdlGraphicsManager();
+	virtual ~SdlGraphicsManager() {}
 
 	/**
 	 * Makes this graphics manager active. That means it should be ready to
@@ -74,15 +77,7 @@ public:
 	 * @param width Requested window width.
 	 * @param height Requested window height.
 	 */
-	virtual void notifyResize(const uint width, const uint height) {}
-
-	/**
-	 * Transforms real screen coordinates into the current active screen
-	 * coordinates (may be either game screen or overlay).
-	 *
-	 * @param point Mouse coordinates to transform.
-	 */
-	virtual void transformMouseCoordinates(Common::Point &point) = 0;
+	virtual void notifyResize(const int width, const int height) {}
 
 	/**
 	 * Notifies the graphics manager about a mouse position change.
@@ -97,7 +92,15 @@ public:
 	 * @returns true if the mouse was in a valid position for the game and
 	 * should cause the event to be sent to the game.
 	 */
-	virtual bool notifyMousePosition(Common::Point &mouse) = 0;
+	virtual bool notifyMousePosition(Common::Point &mouse);
+
+	virtual bool showMouse(bool visible) override;
+
+	virtual bool saveScreenshot(const Common::String &filename) const { return false; }
+	void saveScreenshot() override; // ResidualVM
+
+	// Override from Common::EventObserver
+	virtual bool notifyEvent(const Common::Event &event) override;
 
 	/**
 	 * A (subset) of the graphic manager's state. This is used when switching
@@ -115,23 +118,96 @@ public:
 	};
 
 	/**
-	 * Queries the current state of the graphic manager.
+	 * Gets the current state of the graphics manager.
 	 */
 	State getState() const;
 
 	/**
-	 * Setup a basic state of the graphic manager.
+	 * Sets up a basic state of the graphics manager.
 	 */
 	bool setState(const State &state);
 
 	/**
-	 * Queries the SDL window.
+	 * @returns the SDL window.
 	 */
 	SdlWindow *getWindow() const { return _window; }
 
+	virtual void initSizeHint(const Graphics::ModeList &modes) override;
+
+	Common::Keymap *getKeymap();
+
 protected:
+	enum CustomEventAction {
+		kActionToggleFullscreen = 100,
+		kActionToggleMouseCapture,
+		kActionSaveScreenshot,
+		kActionToggleAspectRatioCorrection,
+		kActionToggleFilteredScaling,
+		kActionCycleStretchMode,
+		kActionIncreaseScaleFactor,
+		kActionDecreaseScaleFactor,
+		kActionSetScaleFilter1,
+		kActionSetScaleFilter2,
+		kActionSetScaleFilter3,
+		kActionSetScaleFilter4,
+		kActionSetScaleFilter5,
+		kActionSetScaleFilter6,
+		kActionSetScaleFilter7,
+		kActionSetScaleFilter8
+	};
+
+	virtual int getGraphicsModeScale(int mode) const = 0;
+
+	bool defaultGraphicsModeConfig() const;
+	int getGraphicsModeIdByName(const Common::String &name) const;
+
+	/**
+	 * Gets the dimensions of the window directly from SDL instead of from the
+	 * values stored by the graphics manager.
+	 */
+	void getWindowSizeFromSdl(int *width, int *height) const {
+#if SDL_VERSION_ATLEAST(2, 0, 0)
+		assert(_window);
+		SDL_GetWindowSize(_window->getSDLWindow(), width, height);
+#else
+		assert(_hwScreen);
+
+		if (width) {
+			*width = _hwScreen->w;
+		}
+
+		if (height) {
+			*height = _hwScreen->h;
+		}
+#endif
+	}
+
+	virtual void setSystemMousePosition(const int x, const int y) override;
+
+	virtual void handleResizeImpl(const int width, const int height, const int xdpi, const int ydpi) override;
+
+#if SDL_VERSION_ATLEAST(2, 0, 0)
+public:
+	void unlockWindowSize() {
+		_allowWindowSizeReset = true;
+		_hintedWidth = 0;
+		_hintedHeight = 0;
+	}
+
+protected:
+	Uint32 _lastFlags;
+	bool _allowWindowSizeReset;
+	int _hintedWidth, _hintedHeight;
+
+	bool createOrUpdateWindow(const int width, const int height, const Uint32 flags);
+#endif
+
+	SDL_Surface *_hwScreen;
 	SdlEventSource *_eventSource;
 	SdlWindow *_window;
+
+private:
+	void toggleFullScreen();
 };
 
 #endif

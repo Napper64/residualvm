@@ -29,6 +29,7 @@
 #include <shlobj.h>
 
 #include "common/scummsys.h"
+#include "common/translation.h"
 #include "backends/platform/sdl/win32/win32_wrapper.h"
 
 // VerSetConditionMask, VerifyVersionInfo and SHGetFolderPath didn't appear until Windows 2000,
@@ -80,24 +81,24 @@ bool confirmWindowsVersion(int majorVersion, int minorVersion) {
 	return VerifyVersionInfoFunc(&versionInfo, VER_MAJORVERSION | VER_MINORVERSION, conditionMask);
 }
 
-wchar_t *ansiToUnicode(const char *s) {
-	DWORD size = MultiByteToWideChar(0, 0, s, -1, NULL, 0);
+wchar_t *ansiToUnicode(const char *s, uint codePage) {
+	DWORD size = MultiByteToWideChar(codePage, 0, s, -1, NULL, 0);
 
 	if (size > 0) {
-		LPWSTR result = new WCHAR[size];
-		if (MultiByteToWideChar(0, 0, s, -1, result, size) != 0)
+		LPWSTR result = (LPWSTR)calloc(size, sizeof(WCHAR));
+		if (MultiByteToWideChar(codePage, 0, s, -1, result, size) != 0)
 			return result;
 	}
 
 	return NULL;
 }
 
-char *unicodeToAnsi(const wchar_t *s) {
-	DWORD size = WideCharToMultiByte(0, 0, s, -1, NULL, 0, 0, 0);
+char *unicodeToAnsi(const wchar_t *s, uint codePage) {
+	DWORD size = WideCharToMultiByte(codePage, 0, s, -1, NULL, 0, 0, 0);
 
 	if (size > 0) {
-		char *result = new char[size];
-		if (WideCharToMultiByte(0, 0, s, -1, result, size, 0, 0) != 0)
+		char *result = (char *)calloc(size, sizeof(char));
+		if (WideCharToMultiByte(codePage, 0, s, -1, result, size, 0, 0) != 0)
 			return result;
 	}
 

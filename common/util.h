@@ -27,6 +27,15 @@
 #include "common/str.h"
 
 /**
+ * @defgroup common_util Util
+ * @ingroup common
+ *
+ * @brief Various utility functions.
+ *
+ * @{
+ */
+
+/**
  * Check whether a given pointer is aligned correctly.
  * Note that 'alignment' must be a power of two!
  */
@@ -49,10 +58,21 @@ template<typename T> inline T ABS(T x)		{ return (x >= 0) ? x : -x; }
 template<typename T> inline T MIN(T a, T b)	{ return (a < b) ? a : b; }
 template<typename T> inline T MAX(T a, T b)	{ return (a > b) ? a : b; }
 template<typename T> inline T CLIP(T v, T amin, T amax)
-		{ if (v < amin) return amin; else if (v > amax) return amax; else return v; }
+	{
+#if !defined(RELEASE_BUILD)
+		// debug builds use this assert to pinpoint
+		// any problematic cases, where amin and amax
+		// are incorrectly ordered
+		// and thus CLIP() would return an invalid result
+		assert(amin <= amax);
+#endif
+		if (v < amin) return amin;
+		else if (v > amax) return amax;
+		return v;
+	}
 
 /**
- * Template method which swaps the vaulues of its two parameters.
+ * Template method which swaps the values of its two parameters.
  */
 template<typename T> inline void SWAP(T &a, T &b) { T tmp = a; a = b; b = tmp; }
 
@@ -70,6 +90,15 @@ template<typename T> inline void SWAP(T &a, T &b) { T tmp = a; a = b; b = tmp; }
  */
 #define ARRAYEND(x) ((x) + ARRAYSIZE((x)))
 
+/*
+ * Clear array using default or provided value
+ */
+template<typename T, size_t N> inline void ARRAYCLEAR(T (&array) [N], const T &value = T()) {
+	T * ptr = array;
+	size_t n = N;
+	while(n--)
+		*ptr++ = value;
+}
 
 /**
  * @def SCUMMVM_CURRENT_FUNCTION
@@ -85,7 +114,14 @@ template<typename T> inline void SWAP(T &a, T &b) { T tmp = a; a = b; b = tmp; }
 #  define SCUMMVM_CURRENT_FUNCTION "<unknown>"
 #endif
 
+/** @} */
+
 namespace Common {
+
+/**
+ * @addtogroup common_util
+ * @{
+ */
 
 /**
  * Print a hexdump of the data passed in. The number of bytes per line is
@@ -142,6 +178,16 @@ bool isAlpha(int c);
 bool isDigit(int c);
 
 /**
+ * Test whether the given character is a hwzadecimal-digit (0-9 or A-F).
+ * If the parameter is outside the range of a signed or unsigned char, then
+ * false is returned.
+ *
+ * @param c		the character to test
+ * @return		true if the character is a hexadecimal-digit, false otherwise.
+ */
+bool isXDigit(int c);
+
+/**
  * Test whether the given character is a lower-case letter (a-z).
  * If the parameter is outside the range of a signed or unsigned char, then
  * false is returned.
@@ -185,15 +231,44 @@ bool isUpper(int c);
  */
 bool isPrint(int c);
 
-
 /**
  * Test whether the given character is a punctuation character,
- * (i.e not alphanumeric.
+ * (i.e. not alphanumeric).
  *
  * @param c		the character to test
  * @return		true if the character is punctuation, false otherwise.
  */
 bool isPunct(int c);
+
+/**
+ * Test whether the given character is a control character.
+ *
+ * @param c		the character to test
+ * @return		true if the character is a control character, false otherwise.
+ */
+bool isCntrl(int c);
+
+/**
+ * Test whether the given character has a graphical representation.
+ *
+ * @param c		the character to test
+ * @return		true if the character is a graphic, false otherwise.
+ */
+bool isGraph(int c);
+
+
+/**
+ * Represent bytes size of a file as a number with floating point and
+ * largest suitable units. For example, 1474560 bytes as 1.4 MB.
+ * 
+ * @param bytes		size in bytes to be represented
+ * @param unitsOut	(out-parameter) string with units
+ * @note			use _() to translate units correctly
+ * @return			string with a floating point number representing given size
+ */
+Common::String getHumanReadableBytes(uint64 bytes, Common::String &unitsOut);
+
+/** @} */
 
 } // End of namespace Common
 

@@ -34,6 +34,8 @@
 
 #include "graphics/colormasks.h"
 
+#include "gui/message.h"
+
 namespace Myst3 {
 
 Dialog::Dialog(Myst3Engine *vm, uint id):
@@ -43,21 +45,21 @@ Dialog::Dialog(Myst3Engine *vm, uint id):
 	_isConstrainedToWindow = false;
 	_scaled = !_vm->isWideScreenModEnabled();
 
-	const DirectorySubEntry *countDesc = _vm->getFileDescription("DLGI", id, 0, DirectorySubEntry::kNumMetadata);
-	const DirectorySubEntry *movieDesc = _vm->getFileDescription("DLOG", id, 0, DirectorySubEntry::kDialogMovie);
-	if (!movieDesc) {
-		movieDesc = _vm->getFileDescription("DLOG", id, 0, DirectorySubEntry::kStillMovie);
+	ResourceDescription countDesc = _vm->getFileDescription("DLGI", id, 0, Archive::kNumMetadata);
+	ResourceDescription movieDesc = _vm->getFileDescription("DLOG", id, 0, Archive::kDialogMovie);
+	if (!movieDesc.isValid()) {
+		movieDesc = _vm->getFileDescription("DLOG", id, 0, Archive::kStillMovie);
 	}
 
-	if (!movieDesc || !countDesc)
+	if (!movieDesc.isValid() || !countDesc.isValid())
 		error("Unable to load dialog %d", id);
 
 	// Retrieve button count
-	_buttonCount = countDesc->getMiscData(0);
+	_buttonCount = countDesc.getMiscData(0);
 	assert(_buttonCount <= 3);
 
 	// Load the movie
-	Common::MemoryReadStream *movieStream = movieDesc->getData();
+	Common::SeekableReadStream *movieStream = movieDesc.getData();
 	_bink.setDefaultHighColorFormat(Texture::getRGBAPixelFormat());
 	_bink.loadStream(movieStream);
 	_bink.start();
@@ -103,16 +105,16 @@ ButtonsDialog::~ButtonsDialog() {
 }
 
 void ButtonsDialog::loadButtons() {
-	const DirectorySubEntry *buttonsDesc = _vm->getFileDescription("DLGB", 1000, 0, DirectorySubEntry::kNumMetadata);
+	ResourceDescription buttonsDesc = _vm->getFileDescription("DLGB", 1000, 0, Archive::kNumMetadata);
 
-	if (!buttonsDesc)
+	if (!buttonsDesc.isValid())
 		error("Unable to load dialog buttons description");
 
 	for (uint i = 0; i < 3; i++) {
-		uint32 left = buttonsDesc->getMiscData(i * 4);
-		uint32 top = buttonsDesc->getMiscData(i * 4 + 1);
-		uint32 width = buttonsDesc->getMiscData(i * 4 + 2);
-		uint32 height = buttonsDesc->getMiscData(i * 4 + 3);
+		uint32 left = buttonsDesc.getMiscData(i * 4);
+		uint32 top = buttonsDesc.getMiscData(i * 4 + 1);
+		uint32 width = buttonsDesc.getMiscData(i * 4 + 2);
+		uint32 height = buttonsDesc.getMiscData(i * 4 + 3);
 		_buttons[i] = Common::Rect(width, height);
 		_buttons[i].translate(left, top);
 	}
@@ -407,12 +409,12 @@ Common::String Menu::getAgeLabel(GameState *gameState) {
 		age = gameState->getLocationAge();
 
 	// Look for the age name
-	const DirectorySubEntry *desc = _vm->getFileDescription("AGES", 1000, 0, DirectorySubEntry::kTextMetadata);
+	ResourceDescription desc = _vm->getFileDescription("AGES", 1000, 0, Archive::kTextMetadata);
 
-	if (!desc)
+	if (!desc.isValid())
 		error("Unable to load age descriptions.");
 
-	Common::String label = desc->getTextData(_vm->_db->getAgeLabelId(age));
+	Common::String label = desc.getTextData(_vm->_db->getAgeLabelId(age));
 	label.toUppercase();
 
 	return label;
@@ -584,7 +586,11 @@ void PagingMenu::loadMenuLoad() {
 	uint16 index = page * 7 + item;
 	assert(index < _saveLoadFiles.size());
 
-	_vm->loadGameState(_saveLoadFiles[index], kTransitionFade);
+	Common::Error loadError = _vm->loadGameState(_saveLoadFiles[index], kTransitionFade);
+	if (loadError.getCode() != Common::kNoError) {
+		GUI::MessageDialog dialog(loadError.getDesc());
+		dialog.runModal();
+	}
 }
 
 void PagingMenu::saveMenuOpen() {
@@ -640,10 +646,11 @@ void PagingMenu::saveMenuSave() {
 	if (fileExists && _vm->openDialog(dialogIdFromType(kConfirmOverwrite)) != 1)
 		return;
 
-	// Save the state and the thumbnail
-	Common::OutSaveFile *save = _vm->getSaveFileManager()->openForSaving(fileName);
-	_vm->_state->save(save, _saveName, _saveThumbnail.get());
-	delete save;
+	Common::Error saveError = _vm->saveGameState(_saveName, _saveThumbnail.get(), false);
+	if (saveError.getCode() != Common::kNoError) {
+		GUI::MessageDialog dialog(saveError.getDesc());
+		dialog.runModal();
+	}
 
 	// Do next action
 	_vm->_state->setMenuNextAction(_vm->_state->getMenuSaveAction());
@@ -843,8 +850,8 @@ void AlbumMenu::saveLoadAction(uint16 action, uint16 item) {
 }
 
 Common::String AlbumMenu::getSaveNameTemplate() {
-	const DirectorySubEntry *saveNameDesc = _vm->getFileDescription("SAVE", 1000, 0, DirectorySubEntry::kTextMetadata);
-	return saveNameDesc->getTextData(0); // "EXILE Saved Game %d"
+	ResourceDescription saveNameDesc = _vm->getFileDescription("SAVE", 1000, 0, Archive::kTextMetadata);
+	return saveNameDesc.getTextData(0); // "EXILE Saved Game %d"
 }
 
 Common::HashMap<int, Common::String> AlbumMenu::listSaveFiles() {
@@ -874,6 +881,10 @@ void AlbumMenu::loadSaves() {
 
 		// Open save
 		Common::InSaveFile *saveFile = _vm->getSaveFileManager()->openForLoading(saveFiles[i]);
+		if (!saveFile) {
+			warning("Failed to open save %s for reading.", saveFiles[i].c_str());
+			continue;
+		}
 
 		// Read state data
 		Common::Serializer s = Common::Serializer(saveFile, 0);
@@ -893,6 +904,8 @@ void AlbumMenu::loadSaves() {
 			miniThumb->free();
 			delete miniThumb;
 		}
+
+		delete saveFile;
 	}
 }
 
@@ -956,7 +969,11 @@ void AlbumMenu::loadMenuLoad() {
 		return; // No save to load, do nothing
 	}
 
-	_vm->loadGameState(saveFiles[selectedSave], kTransitionFade);
+	Common::Error loadError = _vm->loadGameState(saveFiles[selectedSave], kTransitionFade);
+	if (loadError.getCode() != Common::kNoError) {
+		GUI::MessageDialog dialog(loadError.getDesc());
+		dialog.runModal();
+	}
 }
 
 void AlbumMenu::saveMenuOpen() {
@@ -975,17 +992,17 @@ void AlbumMenu::saveMenuSave() {
 
 	Common::String saveNameTemplate = getSaveNameTemplate();
 	Common::String saveName = Common::String::format(saveNameTemplate.c_str(), selectedSave);
-	Common::String fileName = saveName + ".m3x";
 
 	// Ask the user if he wants to overwrite the existing save
 	Common::HashMap<int, Common::String> saveFiles = listSaveFiles();
 	if (saveFiles.contains(selectedSave) && _vm->openDialog(dialogIdFromType(kConfirmOverwrite)) != 1)
 		return;
 
-	// Save the state and the thumbnail
-	Common::OutSaveFile *save = _vm->getSaveFileManager()->openForSaving(fileName);
-	_vm->_state->save(save, saveName, _saveThumbnail.get());
-	delete save;
+	Common::Error saveError = _vm->saveGameState(saveName, _saveThumbnail.get(), false);
+	if (saveError.getCode() != Common::kNoError) {
+		GUI::MessageDialog dialog(saveError.getDesc());
+		dialog.runModal();
+	}
 
 	// Do next action
 	_vm->_state->setMenuNextAction(_vm->_state->getMenuSaveAction());

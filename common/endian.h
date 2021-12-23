@@ -25,10 +25,14 @@
 
 #include "common/scummsys.h"
 
+
 /**
- *  \file endian.h
- *  Endian conversion and byteswap conversion functions or macros
+ * @defgroup common_endian Endian conversions
+ * @ingroup common
  *
+ * @brief  Endian conversion and byteswap conversion functions and macros.
+ *
+ * @details 
  *  SWAP_BYTES_??(a)      - inverse byte order
  *  SWAP_CONSTANT_??(a)   - inverse byte order, implemented as macro.
  *                              Use with compiletime-constants only, the result will be a compiletime-constant aswell.
@@ -42,6 +46,8 @@
  *  CONSTANT_??_??(a)     - convert LE/BE value v to native, implemented as macro.
  *                              Use with compiletime-constants only, the result will be a compiletime-constant aswell.
  *                              Unlike most other functions these can be used for eg. switch-case labels
+ *
+ * @{
  */
 
 // Sanity check
@@ -573,15 +579,31 @@ inline uint32 READ_LE_UINT24(const void *ptr) {
 	return (b[2] << 16) | (b[1] << 8) | (b[0]);
 }
 
+inline void WRITE_LE_UINT24(void *ptr, uint32 value) {
+	uint8 *b = (uint8 *)ptr;
+	b[0] = (uint8)(value >> 0);
+	b[1] = (uint8)(value >> 8);
+	b[2] = (uint8)(value >> 16);
+}
+
 inline uint32 READ_BE_UINT24(const void *ptr) {
 	const uint8 *b = (const uint8 *)ptr;
 	return (b[0] << 16) | (b[1] << 8) | (b[2]);
 }
 
+inline void WRITE_BE_UINT24(void *ptr, uint32 value) {
+	uint8 *b = (uint8 *)ptr;
+	b[0] = (uint8)(value >> 16);
+	b[1] = (uint8)(value >>  8);
+	b[2] = (uint8)(value >>  0);
+}
+
 #ifdef SCUMM_LITTLE_ENDIAN
 #define READ_UINT24(a) READ_LE_UINT24(a)
+#define WRITE_UINT24(a,b) WRITE_LE_UINT24(a,b)
 #else
 #define READ_UINT24(a) READ_BE_UINT24(a)
+#define WRITE_UINT24(a,b) WRITE_BE_UINT24(a,b)
 #endif
 
 inline int16 READ_LE_INT16(const void *ptr) {
@@ -615,5 +637,7 @@ inline int32 READ_BE_INT32(const void *ptr) {
 inline void WRITE_BE_INT32(void *ptr, int32 value) {
 	WRITE_BE_UINT32(ptr, static_cast<uint32>(value));
 }
+
+/** @} */
 
 #endif

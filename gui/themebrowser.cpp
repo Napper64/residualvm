@@ -40,7 +40,7 @@ enum {
 // also it will get its own theme config values
 // and not use 'browser_' anymore
 ThemeBrowser::ThemeBrowser() : Dialog("Browser") {
-	_fileList = 0;
+	_fileList = nullptr;
 
 	new StaticTextWidget(this, "Browser.Headline", _("Select a Theme"));
 
@@ -52,8 +52,8 @@ ThemeBrowser::ThemeBrowser() : Dialog("Browser") {
 	_backgroundType = GUI::ThemeEngine::kDialogBackgroundPlain;
 
 	// Buttons
-	new ButtonWidget(this, "Browser.Cancel", _("Cancel"), 0, kCloseCmd);
-	new ButtonWidget(this, "Browser.Choose", _("Choose"), 0, kChooseCmd);
+	new ButtonWidget(this, "Browser.Cancel", _("Cancel"), Common::U32String(""), kCloseCmd);
+	new ButtonWidget(this, "Browser.Choose", _("Choose"), Common::U32String(""), kChooseCmd);
 }
 
 void ThemeBrowser::open() {
@@ -102,7 +102,7 @@ void ThemeBrowser::updateListing() {
 	const Common::String currentThemeId = g_gui.theme()->getThemeId();
 	int currentThemeIndex = 0, index = 0;
 
-	ListWidget::StringArray list;
+	ListWidget::U32StringArray list;
 	for (ThemeDescList::const_iterator i = _themes.begin(); i != _themes.end(); ++i, ++index) {
 		list.push_back(i->name);
 

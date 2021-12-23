@@ -110,7 +110,7 @@ struct GrimVertex {
 };
 
 struct TextUserData {
-	OpenGL::Shader * shader;
+	OpenGL::ShaderGL * shader;
 	uint32 characters;
 	Color  color;
 	GLuint texture;
@@ -122,7 +122,7 @@ struct FontUserData {
 };
 
 struct EMIModelUserData {
-	OpenGL::Shader *_shader;
+	OpenGL::ShaderGL *_shader;
 	uint32 _texCoordsVBO;
 	uint32 _colorMapVBO;
 	uint32 _verticesVBO;
@@ -130,7 +130,7 @@ struct EMIModelUserData {
 };
 
 struct ModelUserData {
-	OpenGL::Shader *_shader;
+	OpenGL::ShaderGL *_shader;
 	uint32 _meshInfoVBO;
 };
 
@@ -218,7 +218,7 @@ GfxOpenGLS::GfxOpenGLS() {
 	_selectedTexture = NULL;
 	_emergTexture = 0;
 	_maxLights = 8;
-	_lights = new Light[_maxLights];
+	_lights = new GLSLight[_maxLights];
 	_lightsEnabled = false;
 	_hasAmbientLight = false;
 	_backgroundProgram = nullptr;
@@ -239,6 +239,7 @@ GfxOpenGLS::GfxOpenGLS() {
 }
 
 GfxOpenGLS::~GfxOpenGLS() {
+	releaseMovieFrame();
 	for (unsigned int i = 0; i < _numSpecialtyTextures; i++) {
 		destroyTexture(&_specialtyTextures[i]);
 	}
@@ -291,11 +292,11 @@ void GfxOpenGLS::setupQuadEBO() {
 		p[5] = start++;
 	}
 
-	_quadEBO = OpenGL::Shader::createBuffer(GL_ELEMENT_ARRAY_BUFFER, sizeof(quad_indices), quad_indices, GL_STATIC_DRAW);
+	_quadEBO = OpenGL::ShaderGL::createBuffer(GL_ELEMENT_ARRAY_BUFFER, sizeof(quad_indices), quad_indices, GL_STATIC_DRAW);
 }
 
 void GfxOpenGLS::setupTexturedQuad() {
-	_smushVBO = OpenGL::Shader::createBuffer(GL_ARRAY_BUFFER, sizeof(textured_quad), textured_quad, GL_STATIC_DRAW);
+	_smushVBO = OpenGL::ShaderGL::createBuffer(GL_ARRAY_BUFFER, sizeof(textured_quad), textured_quad, GL_STATIC_DRAW);
 	_smushProgram->enableVertexAttribute("position", _smushVBO, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), 0);
 	_smushProgram->enableVertexAttribute("texcoord", _smushVBO, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), 2 * sizeof(float));
 
@@ -311,7 +312,7 @@ void GfxOpenGLS::setupTexturedQuad() {
 }
 
 void GfxOpenGLS::setupTexturedCenteredQuad() {
-	_spriteVBO = OpenGL::Shader::createBuffer(GL_ARRAY_BUFFER, sizeof(textured_quad_centered), textured_quad_centered, GL_STATIC_DRAW);
+	_spriteVBO = OpenGL::ShaderGL::createBuffer(GL_ARRAY_BUFFER, sizeof(textured_quad_centered), textured_quad_centered, GL_STATIC_DRAW);
 	_spriteProgram->enableVertexAttribute("position", _spriteVBO, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), 0);
 	_spriteProgram->enableVertexAttribute("texcoord", _spriteVBO, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), 3 * sizeof(float));
 	_spriteProgram->disableVertexAttribute("color", Math::Vector4d(1.0f, 1.0f, 1.0f, 1.0f));
@@ -373,26 +374,26 @@ void GfxOpenGLS::setupShaders() {
 	bool isEMI = g_grim->getGameType() == GType_MONKEY4;
 
 	static const char* commonAttributes[] = {"position", "texcoord", NULL};
-	_backgroundProgram = OpenGL::Shader::fromFiles(isEMI ? "emi_background" : "grim_background", commonAttributes);
-	_smushProgram = OpenGL::Shader::fromFiles("smush", commonAttributes);
-	_textProgram = OpenGL::Shader::fromFiles("text", commonAttributes);
-	_emergProgram = OpenGL::Shader::fromFiles("emerg", commonAttributes);
+	_backgroundProgram = OpenGL::ShaderGL::fromFiles(isEMI ? "emi_background" : "grim_background", commonAttributes);
+	_smushProgram = OpenGL::ShaderGL::fromFiles("grim_smush", commonAttributes);
+	_textProgram = OpenGL::ShaderGL::fromFiles("grim_text", commonAttributes);
+	_emergProgram = OpenGL::ShaderGL::fromFiles("grim_emerg", commonAttributes);
 
 	static const char* actorAttributes[] = {"position", "texcoord", "color", "normal", NULL};
-	_actorProgram = OpenGL::Shader::fromFiles(isEMI ? "emi_actor" : "grim_actor", actorAttributes);
-	_spriteProgram = OpenGL::Shader::fromFiles(isEMI ? "emi_actor" : "grim_actor", actorAttributes);
+	_actorProgram = OpenGL::ShaderGL::fromFiles(isEMI ? "emi_actor" : "grim_actor", actorAttributes);
+	_spriteProgram = OpenGL::ShaderGL::fromFiles(isEMI ? "emi_actor" : "grim_actor", actorAttributes);
 
 	static const char* primAttributes[] = { "position", NULL };
-	_shadowPlaneProgram = OpenGL::Shader::fromFiles("shadowplane", primAttributes);
-	_primitiveProgram = OpenGL::Shader::fromFiles("grim_primitive", primAttributes);
+	_shadowPlaneProgram = OpenGL::ShaderGL::fromFiles("grim_shadowplane", primAttributes);
+	_primitiveProgram = OpenGL::ShaderGL::fromFiles("grim_primitive", primAttributes);
 
 	if (!isEMI) {
 		_irisProgram = _primitiveProgram->clone();
 
-		_dimProgram = OpenGL::Shader::fromFiles("dim", commonAttributes);
+		_dimProgram = OpenGL::ShaderGL::fromFiles("grim_dim", commonAttributes);
 		_dimRegionProgram = _dimProgram->clone();
 	} else {
-		_dimPlaneProgram = OpenGL::Shader::fromFiles("emi_dimplane", primAttributes);
+		_dimPlaneProgram = OpenGL::ShaderGL::fromFiles("emi_dimplane", primAttributes);
 	}
 
 	setupQuadEBO();
@@ -401,19 +402,17 @@ void GfxOpenGLS::setupShaders() {
 	setupPrimitives();
 
 	if (!isEMI) {
-		_blastVBO = OpenGL::Shader::createBuffer(GL_ARRAY_BUFFER, 128 * 16 * sizeof(float), NULL, GL_DYNAMIC_DRAW);
+		_blastVBO = OpenGL::ShaderGL::createBuffer(GL_ARRAY_BUFFER, 128 * 16 * sizeof(float), NULL, GL_DYNAMIC_DRAW);
 	}
 }
 
-byte *GfxOpenGLS::setupScreen(int screenW, int screenH, bool fullscreen) {
+void GfxOpenGLS::setupScreen(int screenW, int screenH, bool fullscreen) {
 	_screenWidth = screenW;
 	_screenHeight = screenH;
 	_scaleW = _screenWidth / (float)_gameWidth;
 	_scaleH = _screenHeight / (float)_gameHeight;
 
 	g_system->showMouse(false);
-
-	g_system->setWindowCaption("ResidualVM: OpenGL Renderer with shaders");
 
 	setupZBuffer();
 	setupShaders();
@@ -431,7 +430,6 @@ byte *GfxOpenGLS::setupScreen(int screenW, int screenH, bool fullscreen) {
 		// color map and the following are using textures.
 		glDepthFunc(GL_LEQUAL);
 	}
-	return NULL;
 }
 
 void GfxOpenGLS::setupCameraFrustum(float fov, float nclip, float fclip) {
@@ -440,7 +438,7 @@ void GfxOpenGLS::setupCameraFrustum(float fov, float nclip, float fclip) {
 
 	_fov = fov; _nclip = nclip; _fclip = fclip;
 
-	float right = nclip * tan(fov / 2 * (LOCAL_PI / 180));
+	float right = nclip * tan(fov / 2 * ((float)M_PI / 180));
 	float top = right * 0.75;
 
 	_projMatrix = makeFrustumMatrix(-right, right, -top, top, nclip, fclip);
@@ -730,6 +728,7 @@ void GfxOpenGLS::startActorDraw(const Actor *actor) {
 		Math::Matrix4 modelMatrix = quat.toMatrix();
 		bool hasZBuffer = g_grim->getCurrSet()->getCurrSetup()->_bkgndZBm;
 		Math::Matrix4 extraMatrix;
+		_matrixStack.top() = extraMatrix;
 
 		modelMatrix.transpose();
 		modelMatrix.setPosition(pos);
@@ -777,7 +776,7 @@ void GfxOpenGLS::startActorDraw(const Actor *actor) {
 	_actorProgram->setUniform("hasAmbient", _hasAmbientLight);
 	if (_lightsEnabled) {
 		for (int i = 0; i < _maxLights; ++i) {
-			const Light &l = _lights[i];
+			const GLSLight &l = _lights[i];
 			Common::String uniform;
 			uniform = Common::String::format("lights[%u]._position", i);
 
@@ -852,8 +851,8 @@ void GfxOpenGLS::drawShadowPlanes() {
 		ShadowUserData *sud = new ShadowUserData;
 		_currentShadowArray->userData = sud;
 		sud->_numTriangles = numTriangles;
-		sud->_verticesVBO = OpenGL::Shader::createBuffer(GL_ARRAY_BUFFER, 3 * numVertices * sizeof(float), vertBuf, GL_STATIC_DRAW);
-		sud->_indicesVBO = OpenGL::Shader::createBuffer(GL_ELEMENT_ARRAY_BUFFER, 3 * numTriangles * sizeof(uint16), idxBuf, GL_STATIC_DRAW);
+		sud->_verticesVBO = OpenGL::ShaderGL::createBuffer(GL_ARRAY_BUFFER, 3 * numVertices * sizeof(float), vertBuf, GL_STATIC_DRAW);
+		sud->_indicesVBO = OpenGL::ShaderGL::createBuffer(GL_ELEMENT_ARRAY_BUFFER, 3 * numTriangles * sizeof(uint16), idxBuf, GL_STATIC_DRAW);
 
 		delete[] vertBuf;
 		delete[] idxBuf;
@@ -907,8 +906,8 @@ void GfxOpenGLS::getShadowColor(byte *r, byte *g, byte *b) {
 void GfxOpenGLS::destroyShadow(Shadow *shadow) {
 	ShadowUserData *sud = static_cast<ShadowUserData *>(shadow->userData);
 	if (sud) {
-		OpenGL::Shader::freeBuffer(sud->_verticesVBO);
-		OpenGL::Shader::freeBuffer(sud->_indicesVBO);
+		OpenGL::ShaderGL::freeBuffer(sud->_verticesVBO);
+		OpenGL::ShaderGL::freeBuffer(sud->_indicesVBO);
 		delete sud;
 	}
 
@@ -975,7 +974,7 @@ void GfxOpenGLS::drawMesh(const Mesh *mesh) {
 	const ModelUserData *mud = (const ModelUserData *)mesh->_userData;
 	if (!mud)
 		return;
-	OpenGL::Shader *actorShader = mud->_shader;
+	OpenGL::ShaderGL *actorShader = mud->_shader;
 
 	actorShader->use();
 	actorShader->setUniform("extraMatrix", _matrixStack.top());
@@ -1313,11 +1312,11 @@ void GfxOpenGLS::createBitmap(BitmapData *bitmap) {
 			delete[] texData;
 		bitmap->freeData();
 
-		OpenGL::Shader *shader = _backgroundProgram->clone();
+		OpenGL::ShaderGL *shader = _backgroundProgram->clone();
 		bitmap->_userData = shader;
 
 		if (g_grim->getGameType() == GType_MONKEY4) {
-			GLuint vbo = OpenGL::Shader::createBuffer(GL_ARRAY_BUFFER, bitmap->_numCoords * 4 * sizeof(float), bitmap->_texc, GL_STATIC_DRAW);
+			GLuint vbo = OpenGL::ShaderGL::createBuffer(GL_ARRAY_BUFFER, bitmap->_numCoords * 4 * sizeof(float), bitmap->_texc, GL_STATIC_DRAW);
 			shader->enableVertexAttribute("position", vbo, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), 0);
 			shader->enableVertexAttribute("texcoord", vbo, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), 2*sizeof(float));
 		}
@@ -1331,7 +1330,7 @@ void GfxOpenGLS::createBitmap(BitmapData *bitmap) {
 void GfxOpenGLS::drawBitmap(const Bitmap *bitmap, int dx, int dy, uint32 layer) {
 	if (g_grim->getGameType() == GType_MONKEY4 && bitmap->_data && bitmap->_data->_texc) {
 		BitmapData *data = bitmap->_data;
-		OpenGL::Shader *shader = (OpenGL::Shader *)data->_userData;
+		OpenGL::ShaderGL *shader = (OpenGL::ShaderGL *)data->_userData;
 		GLuint *textures = (GLuint *)bitmap->getTexIds();
 
 		glDisable(GL_DEPTH_TEST);
@@ -1367,7 +1366,7 @@ void GfxOpenGLS::drawBitmap(const Bitmap *bitmap, int dx, int dy, uint32 layer) 
 			glDisable(GL_BLEND);
 		}
 
-		OpenGL::Shader *shader = (OpenGL::Shader *)bitmap->_data->_userData;
+		OpenGL::ShaderGL *shader = (OpenGL::ShaderGL *)bitmap->_data->_userData;
 		shader->use();
 		glDisable(GL_DEPTH_TEST);
 		glDepthMask(GL_FALSE);
@@ -1422,7 +1421,7 @@ void GfxOpenGLS::destroyBitmap(BitmapData *bitmap) {
 		delete[] textures;
 		bitmap->_texIds = 0;
 	}
-	OpenGL::Shader *shader = (OpenGL::Shader *)bitmap->_userData;
+	OpenGL::ShaderGL *shader = (OpenGL::ShaderGL *)bitmap->_userData;
 	if (g_grim->getGameType() == GType_MONKEY4) {
 		glDeleteBuffers(1, &shader->getAttributeAt(0)._vbo);
 	}
@@ -1582,10 +1581,10 @@ void GfxOpenGLS::createTextObject(TextObject *text) {
 		glBindBuffer(GL_ARRAY_BUFFER, vbo);
 		glBufferSubData(GL_ARRAY_BUFFER, 0, numCharacters * 16 * sizeof(float), bufData);
 	} else {
-		vbo = OpenGL::Shader::createBuffer(GL_ARRAY_BUFFER, numCharacters * 16 * sizeof(float), bufData, GL_STATIC_DRAW);
+		vbo = OpenGL::ShaderGL::createBuffer(GL_ARRAY_BUFFER, numCharacters * 16 * sizeof(float), bufData, GL_STATIC_DRAW);
 	}
 
-	OpenGL::Shader * textShader = _textProgram->clone();
+	OpenGL::ShaderGL * textShader = _textProgram->clone();
 	glBindBuffer(GL_ARRAY_BUFFER, vbo);
 
 	textShader->enableVertexAttribute("position", vbo, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), 0);
@@ -2005,15 +2004,15 @@ void GfxOpenGLS::renderZBitmaps(bool render) {
 void GfxOpenGLS::createEMIModel(EMIModel *model) {
 	EMIModelUserData *mud = new EMIModelUserData;
 	model->_userData = mud;
-	mud->_verticesVBO = OpenGL::Shader::createBuffer(GL_ARRAY_BUFFER, model->_numVertices * 3 * sizeof(float), model->_vertices, GL_STREAM_DRAW);
+	mud->_verticesVBO = OpenGL::ShaderGL::createBuffer(GL_ARRAY_BUFFER, model->_numVertices * 3 * sizeof(float), model->_vertices, GL_STREAM_DRAW);
 
-	mud->_normalsVBO = OpenGL::Shader::createBuffer(GL_ARRAY_BUFFER, model->_numVertices * 3 * sizeof(float), model->_normals, GL_STREAM_DRAW);
+	mud->_normalsVBO = OpenGL::ShaderGL::createBuffer(GL_ARRAY_BUFFER, model->_numVertices * 3 * sizeof(float), model->_normals, GL_STREAM_DRAW);
 
-	mud->_texCoordsVBO = OpenGL::Shader::createBuffer(GL_ARRAY_BUFFER, model->_numVertices * 2 * sizeof(float), model->_texVerts, GL_STATIC_DRAW);
+	mud->_texCoordsVBO = OpenGL::ShaderGL::createBuffer(GL_ARRAY_BUFFER, model->_numVertices * 2 * sizeof(float), model->_texVerts, GL_STATIC_DRAW);
 
-	mud->_colorMapVBO = OpenGL::Shader::createBuffer(GL_ARRAY_BUFFER, model->_numVertices * 4 * sizeof(byte), model->_colorMap, GL_STATIC_DRAW);
+	mud->_colorMapVBO = OpenGL::ShaderGL::createBuffer(GL_ARRAY_BUFFER, model->_numVertices * 4 * sizeof(byte), model->_colorMap, GL_STATIC_DRAW);
 
-	OpenGL::Shader * actorShader = _actorProgram->clone();
+	OpenGL::ShaderGL * actorShader = _actorProgram->clone();
 	actorShader->enableVertexAttribute("position", mud->_verticesVBO, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), 0);
 	actorShader->enableVertexAttribute("normal", mud->_normalsVBO, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), 0);
 	actorShader->enableVertexAttribute("texcoord", mud->_texCoordsVBO, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), 0);
@@ -2022,7 +2021,7 @@ void GfxOpenGLS::createEMIModel(EMIModel *model) {
 
 	for (uint32 i = 0; i < model->_numFaces; ++i) {
 		EMIMeshFace * face = &model->_faces[i];
-		face->_indicesEBO = OpenGL::Shader::createBuffer(GL_ELEMENT_ARRAY_BUFFER, face->_faceLength * 3 * sizeof(uint32), face->_indexes, GL_STATIC_DRAW);
+		face->_indicesEBO = OpenGL::ShaderGL::createBuffer(GL_ELEMENT_ARRAY_BUFFER, face->_faceLength * 3 * sizeof(uint32), face->_indexes, GL_STATIC_DRAW);
 	}
 
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
@@ -2031,17 +2030,17 @@ void GfxOpenGLS::createEMIModel(EMIModel *model) {
 void GfxOpenGLS::destroyEMIModel(EMIModel *model) {
 	for (uint32 i = 0; i < model->_numFaces; ++i) {
 		EMIMeshFace *face = &model->_faces[i];
-		OpenGL::Shader::freeBuffer(face->_indicesEBO);
+		OpenGL::ShaderGL::freeBuffer(face->_indicesEBO);
 		face->_indicesEBO = 0;
 	}
 
 	EMIModelUserData *mud = static_cast<EMIModelUserData *>(model->_userData);
 
 	if (mud) {
-		OpenGL::Shader::freeBuffer(mud->_verticesVBO);
-		OpenGL::Shader::freeBuffer(mud->_normalsVBO);
-		OpenGL::Shader::freeBuffer(mud->_texCoordsVBO);
-		OpenGL::Shader::freeBuffer(mud->_colorMapVBO);
+		OpenGL::ShaderGL::freeBuffer(mud->_verticesVBO);
+		OpenGL::ShaderGL::freeBuffer(mud->_normalsVBO);
+		OpenGL::ShaderGL::freeBuffer(mud->_texCoordsVBO);
+		OpenGL::ShaderGL::freeBuffer(mud->_colorMapVBO);
 
 		delete mud->_shader;
 		delete mud;
@@ -2085,9 +2084,9 @@ void GfxOpenGLS::createMesh(Mesh *mesh) {
 	ModelUserData *mud = new ModelUserData;
 	mesh->_userData = mud;
 
-	mud->_meshInfoVBO = OpenGL::Shader::createBuffer(GL_ARRAY_BUFFER, meshInfo.size() * sizeof(GrimVertex), &meshInfo[0], GL_STATIC_DRAW);
+	mud->_meshInfoVBO = OpenGL::ShaderGL::createBuffer(GL_ARRAY_BUFFER, meshInfo.size() * sizeof(GrimVertex), &meshInfo[0], GL_STATIC_DRAW);
 
-	OpenGL::Shader *shader = _actorProgram->clone();
+	OpenGL::ShaderGL *shader = _actorProgram->clone();
 	mud->_shader = shader;
 	shader->enableVertexAttribute("position", mud->_meshInfoVBO, 3, GL_FLOAT, GL_FALSE, sizeof(GrimVertex), 0);
 	shader->enableVertexAttribute("texcoord", mud->_meshInfoVBO, 2, GL_FLOAT, GL_FALSE, sizeof(GrimVertex), 3 * sizeof(float));

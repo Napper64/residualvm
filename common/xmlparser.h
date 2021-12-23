@@ -36,6 +36,15 @@
 
 namespace Common {
 
+/**
+ * @defgroup common_xmlparser XML parser
+ * @ingroup common
+ *
+ * @brief The XML parser allows for parsing XML-like files.
+ * 
+ * @{
+ */
+
 class SeekableReadStream;
 
 #define MAX_XML_DEPTH 8
@@ -64,12 +73,12 @@ class SeekableReadStream;
 #define CUSTOM_XML_PARSER(parserName) \
 	protected: \
 	typedef parserName kLocalParserName; \
-	bool keyCallback(ParserNode *node) {return node->layout->doCallback(this, node); }\
+	bool keyCallback(ParserNode *node) override {return node->layout->doCallback(this, node); }\
 	struct CustomXMLKeyLayout : public XMLKeyLayout {\
 		typedef bool (parserName::*ParserCallback)(ParserNode *node);\
 		ParserCallback callback;\
 		bool doCallback(XMLParser *parent, ParserNode *node) {return ((kLocalParserName *)parent->*callback)(node);} };\
-	virtual void buildLayout() { \
+	virtual void buildLayout() override { \
 		Common::Stack<XMLKeyLayout *> layout; \
 		CustomXMLKeyLayout *lay = 0; \
 		XMLKeyLayout::XMLKeyProperty prop; \
@@ -348,6 +357,8 @@ private:
 
 	Stack<ParserNode *> _activeKey; /** Node stack of the parsed keys */
 };
+
+/** @} */
 
 } // End of namespace Common
 

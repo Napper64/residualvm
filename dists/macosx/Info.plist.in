@@ -9,7 +9,7 @@
 	<key>CFBundleExecutable</key>
 	<string>residualvm</string>
 	<key>CFBundleGetInfoString</key>
-	<string>@VERSION@, Copyright 2003-2019 The ResidualVM Team</string>
+	<string>@VERSION@, Copyright 2003-2020 The ResidualVM Team</string>
 	<key>CFBundleIconFile</key>
 	<string>residualvm.icns</string>
 	<key>CFBundleIdentifier</key>
@@ -49,12 +49,16 @@
 	<key>CFBundleVersion</key>
 	<string>@VERSION@</string>
 	<key>NSHumanReadableCopyright</key>
-	<string>Copyright 2003-2019 The ResidualVM Team</string>
+	<string>Copyright 2003-2020 The ResidualVM Team</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
 	<key>SUFeedURL</key>
 	<string>https://www.residualvm.org/appcasts/macosx/release.xml</string>
 	<key>NSDockTilePlugIn</key>
 	<string>residualvm.docktileplugin</string>
+	<key>NSRequiresAquaSystemAppearance</key>
+	<false/>
+	<key>NSDocumentsFolderUsageDescription</key>
+	<string>ResidualVM saves and loads savegames in the Documents folder by default.</string>
 </dict>
 </plist>

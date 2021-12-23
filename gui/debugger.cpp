@@ -59,7 +59,7 @@ Debugger::Debugger() {
 #endif
 
 	// Register variables
-	registerVar("debug_countdown", &_frameCountdown, DVAR_INT, 0);
+	registerVarImpl("debug_countdown", &_frameCountdown, DVAR_INT, 0);
 
 	// Register commands
 	//registerCmd("continue",			WRAP_METHOD(Debugger, cmdExit));
@@ -83,6 +83,10 @@ Debugger::~Debugger() {
 #ifndef USE_TEXT_CONSOLE_FOR_DEBUGGER
 	delete _debuggerDialog;
 #endif
+}
+
+void Debugger::clearVars() {
+	_vars.resize(1); // Keep "debug_countdown"
 }
 
 
@@ -139,7 +143,7 @@ void Debugger::debugPrintColumns(const Common::StringArray &list) {
 		for (j = 0; j < columns; j++) {
 			uint pos = i + j * lines;
 			if (pos < list.size()) {
-				debugPrintf("%*s", -columnWidth, list[pos].c_str());
+				debugPrintf("%*s", -1 * columnWidth, list[pos].c_str());
 			}
 		}
 		debugPrintf("\n");
@@ -147,11 +151,11 @@ void Debugger::debugPrintColumns(const Common::StringArray &list) {
 }
 
 void Debugger::preEnter() {
-	g_engine->pauseEngine(true);
+	_debugPauseToken = g_engine->pauseEngine();
 }
 
 void Debugger::postEnter() {
-	g_engine->pauseEngine(false);
+	_debugPauseToken.clear();
 }
 
 void Debugger::attach(const char *entry) {
@@ -257,6 +261,7 @@ void Debugger::enter() {
 
 	do {
 		printf("debug> ");
+		::fflush(stdout);
 		if (!fgets(buf, sizeof(buf), stdin))
 			return;
 
@@ -402,6 +407,8 @@ void Debugger::splitCommand(Common::String &input, int &argc, const char **argv)
 		c = (byte)*p;
 
 		switch (state) {
+		default:
+			// fallthrough intended
 		case DULL:
 			// not in a word, not in a double quoted string
 			if (isspace(c))
@@ -517,7 +524,7 @@ char *Debugger::readlineComplete(const char *input, int state) {
 #endif
 
 // Variable registration function
-void Debugger::registerVar(const Common::String &varname, void *pointer, VarType type, int arraySize) {
+void Debugger::registerVarImpl(const Common::String &varname, void *pointer, VarType type, int arraySize) {
 	// TODO: Filter out duplicates
 	// TODO: Sort this list? Then we can do binary search later on when doing lookups.
 	assert(pointer);

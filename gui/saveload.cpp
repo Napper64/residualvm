@@ -30,13 +30,13 @@
 
 namespace GUI {
 
-SaveLoadChooser::SaveLoadChooser(const String &title, const String &buttonLabel, bool saveMode)
-	: _impl(0), _title(title), _buttonLabel(buttonLabel), _saveMode(saveMode) {
+SaveLoadChooser::SaveLoadChooser(const U32String &title, const U32String &buttonLabel, bool saveMode)
+	: _impl(nullptr), _title(title), _buttonLabel(buttonLabel), _saveMode(saveMode) {
 }
 
 SaveLoadChooser::~SaveLoadChooser() {
 	delete _impl;
-	_impl = 0;
+	_impl = nullptr;
 }
 
 void SaveLoadChooser::selectChooser(const MetaEngine &engine) {
@@ -44,13 +44,15 @@ void SaveLoadChooser::selectChooser(const MetaEngine &engine) {
 	const SaveLoadChooserType requestedType = getRequestedSaveLoadDialog(engine);
 	if (!_impl || _impl->getType() != requestedType) {
 		delete _impl;
-		_impl = 0;
+		_impl = nullptr;
 
 		switch (requestedType) {
 		case kSaveLoadDialogGrid:
 			_impl = new SaveLoadChooserGrid(_title, _saveMode);
 			break;
 
+		default:
+			// fallthrough intended
 		case kSaveLoadDialogList:
 #endif // !DISABLE_SAVELOADCHOOSER_GRID
 			_impl = new SaveLoadChooserSimple(_title, _buttonLabel, _saveMode);
@@ -74,15 +76,24 @@ Common::String SaveLoadChooser::createDefaultSaveDescription(const int slot) con
 }
 
 int SaveLoadChooser::runModalWithCurrentTarget() {
-	const Common::String gameId = ConfMan.get("gameid");
+	const Plugin *plugin = EngineMan.findPlugin(ConfMan.get("engineid"));
+	const Plugin *enginePlugin = nullptr;
+	if (!plugin) {
+		error("SaveLoadChooser::runModalWithCurrentTarget(): Cannot find plugin");
+	} else {
+		enginePlugin = PluginMan.getEngineFromMetaEngine(plugin);
 
-	const Plugin *plugin = 0;
-	EngineMan.findGame(gameId, &plugin);
-
-	return runModalWithPluginAndTarget(plugin, ConfMan.getActiveDomainName());
+		if (!enginePlugin) {
+			error("SaveLoadChooser::runModalWithCurrentTarget(): Couldn't match a Engine from the MetaEngine. \
+				You will not be able to see savefiles until you have the necessary plugins.");
+		}
+	}
+	return runModalWithPluginAndTarget(enginePlugin, ConfMan.getActiveDomainName());
 }
 
 int SaveLoadChooser::runModalWithPluginAndTarget(const Plugin *plugin, const String &target) {
+	assert(plugin->getType() == PLUGIN_TYPE_ENGINE);
+
 	selectChooser(plugin->get<MetaEngine>());
 	if (!_impl)
 		return -1;
@@ -112,7 +123,7 @@ int SaveLoadChooser::runModalWithPluginAndTarget(const Plugin *plugin, const Str
 	return ret;
 }
 
-const Common::String &SaveLoadChooser::getResultString() const {
+const Common::U32String &SaveLoadChooser::getResultString() const {
 	assert(_impl);
 	return _impl->getResultString();
 }

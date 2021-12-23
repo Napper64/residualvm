@@ -70,21 +70,13 @@ MacOSXUpdateManager::MacOSXUpdateManager() {
 	// Set appcast URL
 	[sparkleUpdater setFeedURL:[NSURL URLWithString:feedbackURL]];
 
-	// Get current encoding
-	CFStringRef encStr = CFStringCreateWithCString(NULL, TransMan.getCurrentCharset().c_str(), kCFStringEncodingASCII);
-	CFStringEncoding stringEncoding = CFStringConvertIANACharSetNameToEncoding(encStr);
-	CFRelease(encStr);
-
 	// Add "Check for Updates..." menu item
-	CFStringRef title = CFStringCreateWithCString(NULL, _("Check for Updates..."), stringEncoding);
+	CFStringRef title = CFStringCreateWithCString(NULL, _("Check for Updates...").encode().c_str(), kCFStringEncodingUTF8);
 	NSMenuItem *updateMenuItem = [applicationMenu insertItemWithTitle:(NSString *)title action:@selector(checkForUpdates:) keyEquivalent:@"" atIndex:1];
 	CFRelease(title);
 
 	// Set the target of the new menu item
 	[updateMenuItem setTarget:sparkleUpdater];
-
-	// Finally give up our references to the objects
-	[menuItem release];
 
 	if (!ConfMan.hasKey("updates_check")
 			|| ConfMan.getInt("updates_check") == Common::UpdateManager::kUpdateIntervalNotSupported) {

@@ -37,7 +37,6 @@
 
 namespace Common {
 
-#define MBI_INFOHDR 128
 #define MBI_ZERO1 0
 #define MBI_NAMELEN 1
 #define MBI_ZERO2 74
@@ -47,8 +46,21 @@ namespace Common {
 #define MAXNAMELEN 63
 
 MacResManager::MacResManager() {
-	memset(this, 0, sizeof(MacResManager));
-	close();
+	_stream = nullptr;
+	// _baseFileName cleared by String constructor
+
+	_mode = kResForkNone;
+
+	_resForkOffset = -1;
+	_resForkSize = 0;
+
+	_dataOffset = 0;
+	_dataLength = 0;
+	_mapOffset = 0;
+	_mapLength = 0;
+	_resMap.reset();
+	_resTypes = nullptr;
+	_resLists = nullptr;
 }
 
 MacResManager::~MacResManager() {
@@ -104,79 +116,20 @@ String MacResManager::computeResForkMD5AsString(uint32 length) const {
 }
 
 bool MacResManager::open(const String &fileName) {
-	close();
-
-#ifdef MACOSX
-	// Check the actual fork on a Mac computer
-	String fullPath = ConfMan.get("path") + "/" + fileName + "/..namedfork/rsrc";
-	FSNode resFsNode = FSNode(fullPath);
-	if (resFsNode.exists()) {
-		SeekableReadStream *macResForkRawStream = resFsNode.createReadStream();
-
-		if (macResForkRawStream && loadFromRawFork(*macResForkRawStream)) {
-			_baseFileName = fileName;
-			return true;
-		}
-
-		delete macResForkRawStream;
-	}
-#endif
-
-	File *file = new File();
-
-	// Prefer standalone files first, starting with raw forks
-	if (file->open(fileName + ".rsrc") && loadFromRawFork(*file)) {
-		_baseFileName = fileName;
-		return true;
-	}
-	file->close();
-
-	// Then try for AppleDouble using Apple's naming
-	if (file->open(constructAppleDoubleName(fileName)) && loadFromAppleDouble(*file)) {
-		_baseFileName = fileName;
-		return true;
-	}
-	file->close();
-
-	// Check .bin for MacBinary next
-	if (file->open(fileName + ".bin") && loadFromMacBinary(*file)) {
-		_baseFileName = fileName;
-		return true;
-	}
-	file->close();
-
-	// As a last resort, see if just the data fork exists
-	if (file->open(fileName)) {
-		_baseFileName = fileName;
-
-		// FIXME: Is this really needed?
-		if (isMacBinary(*file)) {
-			file->seek(0);
-			if (loadFromMacBinary(*file))
-				return true;
-		}
-
-		file->seek(0);
-		_stream = file;
-		return true;
-	}
-
-	delete file;
-
-	// The file doesn't exist
-	return false;
+	return open(fileName, SearchMan);
 }
 
-bool MacResManager::open(const FSNode &path, const String &fileName) {
+bool MacResManager::open(const String &fileName, Archive &archive) {
 	close();
 
 #ifdef MACOSX
 	// Check the actual fork on a Mac computer
-	String fullPath = path.getPath() + "/" + fileName + "/..namedfork/rsrc";
-	FSNode resFsNode = FSNode(fullPath);
-	if (resFsNode.exists()) {
+	const ArchiveMemberPtr archiveMember = archive.getMember(fileName);
+	const Common::FSNode *plainFsNode = dynamic_cast<const Common::FSNode *>(archiveMember.get());
+	if (plainFsNode) {
+		String fullPath = plainFsNode->getPath() + "/..namedfork/rsrc";
+		FSNode resFsNode = FSNode(fullPath);
 		SeekableReadStream *macResForkRawStream = resFsNode.createReadStream();
-
 		if (macResForkRawStream && loadFromRawFork(*macResForkRawStream)) {
 			_baseFileName = fileName;
 			return true;
@@ -187,45 +140,36 @@ bool MacResManager::open(const FSNode &path, const String &fileName) {
 #endif
 
 	// Prefer standalone files first, starting with raw forks
-	FSNode fsNode = path.getChild(fileName + ".rsrc");
-	if (fsNode.exists() && !fsNode.isDirectory()) {
-		SeekableReadStream *stream = fsNode.createReadStream();
-		if (loadFromRawFork(*stream)) {
-			_baseFileName = fileName;
-			return true;
-		}
-		delete stream;
+	SeekableReadStream *stream = archive.createReadStreamForMember(fileName + ".rsrc");
+	if (stream && loadFromRawFork(*stream)) {
+		_baseFileName = fileName;
+		return true;
 	}
+	delete stream;
 
 	// Then try for AppleDouble using Apple's naming
-	fsNode = path.getChild(constructAppleDoubleName(fileName));
-	if (fsNode.exists() && !fsNode.isDirectory()) {
-		SeekableReadStream *stream = fsNode.createReadStream();
-		if (loadFromAppleDouble(*stream)) {
-			_baseFileName = fileName;
-			return true;
-		}
-		delete stream;
+	stream = archive.createReadStreamForMember(constructAppleDoubleName(fileName));
+	if (stream && loadFromAppleDouble(*stream)) {
+		_baseFileName = fileName;
+		return true;
 	}
+	delete stream;
 
 	// Check .bin for MacBinary next
-	fsNode = path.getChild(fileName + ".bin");
-	if (fsNode.exists() && !fsNode.isDirectory()) {
-		SeekableReadStream *stream = fsNode.createReadStream();
-		if (loadFromMacBinary(*stream)) {
-			_baseFileName = fileName;
-			return true;
-		}
-		delete stream;
+	stream = archive.createReadStreamForMember(fileName + ".bin");
+	if (stream && loadFromMacBinary(*stream)) {
+		_baseFileName = fileName;
+		return true;
 	}
+	delete stream;
 
 	// As a last resort, see if just the data fork exists
-	fsNode = path.getChild(fileName);
-	if (fsNode.exists() && !fsNode.isDirectory()) {
-		SeekableReadStream *stream = fsNode.createReadStream();
+	stream = archive.createReadStreamForMember(fileName);
+	if (stream) {
 		_baseFileName = fileName;
 
-		// FIXME: Is this really needed?
+		// Maybe file is in MacBinary but without .bin extension?
+		// Check it here
 		if (isMacBinary(*stream)) {
 			stream->seek(0);
 			if (loadFromMacBinary(*stream))
@@ -361,7 +305,8 @@ bool MacResManager::isMacBinary(SeekableReadStream &stream) {
 	byte infoHeader[MBI_INFOHDR];
 	int resForkOffset = -1;
 
-	stream.read(infoHeader, MBI_INFOHDR);
+	if (stream.read(infoHeader, MBI_INFOHDR) != MBI_INFOHDR)
+		return false;
 
 	if (infoHeader[MBI_ZERO1] == 0 && infoHeader[MBI_ZERO2] == 0 &&
 		infoHeader[MBI_ZERO3] == 0 && infoHeader[MBI_NAMELEN] <= MAXNAMELEN) {
@@ -371,10 +316,11 @@ bool MacResManager::isMacBinary(SeekableReadStream &stream) {
 		uint32 rsrcSize = READ_BE_UINT32(infoHeader + MBI_RFLEN);
 
 		uint32 dataSizePad = (((dataSize + 127) >> 7) << 7);
-		uint32 rsrcSizePad = (((rsrcSize + 127) >> 7) << 7);
+		// Files produced by ISOBuster are not padded, thus, compare with the actual size
+		//uint32 rsrcSizePad = (((rsrcSize + 127) >> 7) << 7);
 
 		// Length check
-		if (MBI_INFOHDR + dataSizePad + rsrcSizePad == (uint32)stream.size()) {
+		if (MBI_INFOHDR + dataSizePad + rsrcSize <= (uint32)stream.size()) {
 			resForkOffset = MBI_INFOHDR + dataSizePad;
 		}
 	}
@@ -410,10 +356,11 @@ bool MacResManager::loadFromMacBinary(SeekableReadStream &stream) {
 		uint32 rsrcSize = READ_BE_UINT32(infoHeader + MBI_RFLEN);
 
 		uint32 dataSizePad = (((dataSize + 127) >> 7) << 7);
-		uint32 rsrcSizePad = (((rsrcSize + 127) >> 7) << 7);
+		// Files produced by ISOBuster are not padded, thus, compare with the actual size
+		//uint32 rsrcSizePad = (((rsrcSize + 127) >> 7) << 7);
 
 		// Length check
-		if (MBI_INFOHDR + dataSizePad + rsrcSizePad == (uint32)stream.size()) {
+		if (MBI_INFOHDR + dataSizePad + rsrcSize <= (uint32)stream.size()) {
 			_resForkOffset = MBI_INFOHDR + dataSizePad;
 			_resForkSize = rsrcSize;
 		}
@@ -701,6 +648,63 @@ String MacResManager::disassembleAppleDoubleName(String name, bool *isAppleDoubl
 	}
 
 	return name;
+}
+
+void MacResManager::dumpRaw() {
+	byte *data = nullptr;
+	uint dataSize = 0;
+	Common::DumpFile out;
+
+	for (int i = 0; i < _resMap.numTypes; i++) {
+		for (int j = 0; j < _resTypes[i].items; j++) {
+			_stream->seek(_dataOffset + _resLists[i][j].dataOffset);
+			uint32 len = _stream->readUint32BE();
+
+			if (dataSize < len) {
+				free(data);
+				data = (byte *)malloc(len);
+				dataSize = len;
+			}
+
+			Common::String filename = Common::String::format("./dumps/%s-%s-%d", _baseFileName.c_str(), tag2str(_resTypes[i].id), j);
+			_stream->read(data, len);
+
+			if (!out.open(filename)) {
+				warning("MacResManager::dumpRaw(): Can not open dump file %s", filename.c_str());
+				return;
+			}
+
+			out.write(data, len);
+
+			out.flush();
+			out.close();
+
+		}
+	}
+}
+
+MacResManager::MacVers *MacResManager::parseVers(SeekableReadStream *vvers) {
+	MacVers *v = new MacVers;
+
+	v->majorVer = vvers->readByte();
+	v->minorVer = vvers->readByte();
+	byte devStage = vvers->readByte();
+	const char *s;
+	switch (devStage) {
+	case 0x20: s = "Prealpha"; break;
+	case 0x40: s = "Alpha";    break;
+	case 0x60: s = "Beta";     break;
+	case 0x80: s = "Final";    break;
+	default:   s = "";
+	}
+	v->devStr = s;
+
+	v->preReleaseVer = vvers->readByte();
+	v->region = vvers->readUint16BE();
+	v->str = vvers->readPascalString();
+	v->msg = vvers->readPascalString();
+
+	return v;
 }
 
 } // End of namespace Common

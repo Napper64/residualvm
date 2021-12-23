@@ -31,6 +31,15 @@
 
 namespace Common {
 
+/**
+ * @defgroup common_files Files
+ * @ingroup common
+ *
+ * @brief  API for operations on files.
+ *
+ * @{
+ */
+
 class Archive;
 
 /**
@@ -117,14 +126,14 @@ public:
 	 */
 	const char *getName() const { return _name.c_str(); }
 
-	bool err() const;	// implement abstract Stream method
-	void clearErr();	// implement abstract Stream method
-	bool eos() const;	// implement abstract SeekableReadStream method
+	bool err() const override;	// implement abstract Stream method
+	void clearErr() override;	// implement abstract Stream method
+	bool eos() const override;	// implement abstract SeekableReadStream method
 
-	int32 pos() const;	// implement abstract SeekableReadStream method
-	int32 size() const;	// implement abstract SeekableReadStream method
-	bool seek(int32 offs, int whence = SEEK_SET);	// implement abstract SeekableReadStream method
-	uint32 read(void *dataPtr, uint32 dataSize);	// implement abstract SeekableReadStream method
+	int32 pos() const override;	// implement abstract SeekableReadStream method
+	int32 size() const override;	// implement abstract SeekableReadStream method
+	bool seek(int32 offs, int whence = SEEK_SET) override;	// implement abstract SeekableReadStream method
+	uint32 read(void *dataPtr, uint32 dataSize) override;	// implement abstract SeekableReadStream method
 };
 
 
@@ -134,7 +143,7 @@ public:
  * Some design ideas:
  *  - automatically drop all files into dumps/ dir? Might not be desired in all cases
  */
-class DumpFile : public WriteStream, public NonCopyable {
+class DumpFile : public SeekableWriteStream, public NonCopyable {
 protected:
 	/** File handle to the actual file; 0 if no file is open. */
 	WriteStream *_handle;
@@ -155,15 +164,20 @@ public:
 	 */
 	bool isOpen() const;
 
-	bool err() const;
-	void clearErr();
+	bool err() const override;
+	void clearErr() override;
 
-	virtual uint32 write(const void *dataPtr, uint32 dataSize);
+	virtual uint32 write(const void *dataPtr, uint32 dataSize) override;
 
-	virtual bool flush();
+	virtual bool flush() override;
 
-	virtual int32 pos() const;
+	virtual int32 pos() const override;
+
+	virtual bool seek(int32 offset, int whence = SEEK_SET) override;
+	virtual int32 size() const override;
 };
+
+/** @} */
 
 } // End of namespace Common
 

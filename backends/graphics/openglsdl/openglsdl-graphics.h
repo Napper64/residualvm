@@ -1,6 +1,6 @@
-/* ResidualVM - A 3D game interpreter
+/* ScummVM - Graphic Adventure Engine
  *
- * ResidualVM is the legal property of its developers, whose names
+ * ScummVM is the legal property of its developers, whose names
  * are too numerous to list here. Please refer to the COPYRIGHT
  * file distributed with this source distribution.
  *
@@ -20,119 +20,96 @@
  *
  */
 
-#ifndef BACKENDS_GRAPHICS_OPENGLSDL_GRAPHICS_H
-#define BACKENDS_GRAPHICS_OPENGLSDL_GRAPHICS_H
+#ifndef BACKENDS_GRAPHICS_OPENGLSDL_OPENGLSDL_GRAPHICS_H
+#define BACKENDS_GRAPHICS_OPENGLSDL_OPENGLSDL_GRAPHICS_H
 
-#include "backends/graphics/sdl/resvm-sdl-graphics.h"
+#include "backends/graphics/opengl/opengl-graphics.h"
+#include "backends/graphics/sdl/sdl-graphics.h"
+#include "backends/platform/sdl/sdl-sys.h"
 
-namespace OpenGL {
-	class FrameBuffer;
-	class SurfaceRenderer;
-	class Texture;
-	class TiledSurface;
-}
+#include "common/array.h"
+#include "common/events.h"
 
-/**
- * SDL OpenGL based graphics manager
- *
- * Used when rendering games with OpenGL
- */
-class OpenGLSdlGraphicsManager : public ResVmSdlGraphicsManager {
+class OpenGLSdlGraphicsManager : public OpenGL::OpenGLGraphicsManager, public SdlGraphicsManager {
 public:
-	OpenGLSdlGraphicsManager(SdlEventSource *sdlEventSource, SdlWindow *window, const Capabilities &capabilities);
+	OpenGLSdlGraphicsManager(SdlEventSource *eventSource, SdlWindow *window);
 	virtual ~OpenGLSdlGraphicsManager();
 
-	// GraphicsManager API - Features
 	virtual bool hasFeature(OSystem::Feature f) const override;
-	virtual bool getFeatureState(OSystem::Feature f) const override;
 	virtual void setFeatureState(OSystem::Feature f, bool enable) override;
+	virtual bool getFeatureState(OSystem::Feature f) const override;
 
-	// GraphicsManager API - Graphics mode
-	virtual void setupScreen(uint gameWidth, uint gameHeight, bool fullscreen, bool accel3d) override;
-	virtual Graphics::PixelBuffer getScreenPixelBuffer() override;
-	virtual int16 getHeight() const override;
-	virtual int16 getWidth() const override;
+	virtual void initSize(uint w, uint h, const Graphics::PixelFormat *format) override;
+	virtual void updateScreen() override;
 
-	// GraphicsManager API - Draw methods
-	virtual void updateScreen();
-
-	// GraphicsManager API - Overlay
-	virtual void showOverlay() override;
-	virtual void hideOverlay() override;
-	virtual void clearOverlay() override;
-	virtual void grabOverlay(void *buf, int pitch) const override;
-	virtual void copyRectToOverlay(const void *buf, int pitch, int x, int y, int w, int h) override;
-	int16 getOverlayWidth() const override;
-	int16 getOverlayHeight() const override;
-
-	/* Render the passed Surfaces besides the game texture.
-	 * This is used for widescreen support in the Grim engine.
-	 * Note: we must copy the Surfaces, as they are free()d after this call.
-	 */
-	virtual void suggestSideTextures(Graphics::Surface *left, Graphics::Surface *right) override;
-
-	// GraphicsManager API - Mouse
-	virtual void warpMouse(int x, int y) override;
+	// EventObserver API
+	virtual bool notifyEvent(const Common::Event &event) override;
 
 	// SdlGraphicsManager API
-	virtual void transformMouseCoordinates(Common::Point &point) override;
-
-	void notifyResize(const uint width, const uint height) override;
+	virtual void notifyVideoExpose() override;
+	virtual void notifyResize(const int width, const int height) override;
 
 protected:
+	virtual bool loadVideoMode(uint requestedWidth, uint requestedHeight, const Graphics::PixelFormat &format) override;
+
+	virtual void refreshScreen() override;
+
+	virtual void *getProcAddress(const char *name) const override;
+
+	virtual void handleResizeImpl(const int width, const int height, const int xdpi, const int ydpi) override;
+
+	virtual bool saveScreenshot(const Common::String &filename) const override;
+
+	virtual int getGraphicsModeScale(int mode) const override { return 1; }
+
+private:
+	bool setupMode(uint width, uint height);
+
 #if SDL_VERSION_ATLEAST(2, 0, 0)
+	int _glContextProfileMask, _glContextMajor, _glContextMinor;
 	SDL_GLContext _glContext;
-	void deinitializeRenderer();
+#else
+	uint32 _lastVideoModeLoad;
 #endif
 
-	Math::Rect2d _gameRect;
+	uint _lastRequestedWidth;
+	uint _lastRequestedHeight;
+	uint _graphicsScale;
+	bool _ignoreLoadVideoMode;
+	bool _gotResize;
 
-	struct OpenGLPixelFormat {
-		uint bytesPerPixel;
-		uint redSize;
-		uint blueSize;
-		uint greenSize;
-		uint alphaSize;
-		int multisampleSamples;
+	bool _wantsFullScreen;
+	uint _ignoreResizeEvents;
 
-		OpenGLPixelFormat(uint screenBytesPerPixel, uint red, uint blue, uint green, uint alpha, int samples);
+	struct VideoMode {
+		VideoMode() : width(0), height(0) {}
+		VideoMode(uint w, uint h) : width(w), height(h) {}
+
+		bool operator<(const VideoMode &right) const {
+			if (width < right.width) {
+				return true;
+			} else if (width == right.width && height < right.height) {
+				return true;
+			} else {
+				return false;
+			}
+		}
+
+		bool operator==(const VideoMode &right) const {
+			return width == right.width && height == right.height;
+		}
+
+		bool operator!=(const VideoMode &right) const {
+			return !(*this == right);
+		}
+
+		uint width, height;
 	};
+	typedef Common::Array<VideoMode> VideoModeArray;
+	VideoModeArray _fullscreenVideoModes;
 
-	/**
-	 * Initialize an OpenGL window matching as closely as possible the required properties
-	 *
-	 * When unable to create a context with anti-aliasing this tries without.
-	 * When unable to create a context with the desired pixel depth this tries lower values.
-	 */
-	bool createOrUpdateGLContext(uint gameWidth, uint gameHeight, uint effectiveWidth, uint effectiveHeight, bool renderToFramebuffer);
-
-	void createOrUpdateScreen();
-
-	/** Compute the size and position of the game rectangle in the screen */
-	Math::Rect2d computeGameRect(bool renderToFrameBuffer, uint gameWidth, uint gameHeight,
-	                             uint screenWidth, uint screenHeight);
-
-	// ResVmSdlGraphicsManager API
-	bool saveScreenshot(const Common::String &file) const override;
-
-	int _antialiasing;
-	bool _vsync;
-
-	OpenGL::TiledSurface *_overlayScreen;
-	OpenGL::TiledSurface *_overlayBackground;
-	OpenGL::Texture *_sideTextures[2];
-	OpenGL::SurfaceRenderer *_surfaceRenderer;
-
-	void initializeOpenGLContext() const;
-	void drawOverlay();
-	void drawSideTextures();
-	void closeOverlay();
-
-	OpenGL::FrameBuffer *_frameBuffer;
-	OpenGL::FrameBuffer *createFramebuffer(uint width, uint height);
-	bool shouldRenderToFramebuffer() const;
-
-	bool isVSyncEnabled() const;
+	uint _desiredFullscreenWidth;
+	uint _desiredFullscreenHeight;
 };
 
 #endif

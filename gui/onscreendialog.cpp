@@ -51,19 +51,19 @@ enum {
 };
 
 void OnScreenDialog::reflowLayout() {
-	GuiObject::reflowLayout();
+	Dialog::reflowLayout();
+
+	_x = _y = 0;
 }
 
 void OnScreenDialog::releaseFocus() {
 }
 
 OnScreenDialog::OnScreenDialog(bool isRecord) : Dialog("OnScreenDialog") {
-	_x = _y = 0;
-
 #ifndef DISABLE_FANCY_THEMES
 	if (g_gui.xmlEval()->getVar("Globals.OnScreenDialog.ShowPics") == 1 && g_gui.theme()->supportsImages()) {
 		GUI::PicButtonWidget *button;
-		button = new PicButtonWidget(this, "OnScreenDialog.StopButton", 0, kStopCmd, 0);
+		button = new PicButtonWidget(this, "OnScreenDialog.StopButton", Common::U32String(""), kStopCmd, 0);
 		button->useThemeTransparency(true);
 
 		if (g_system->getOverlayWidth() > 320)
@@ -72,7 +72,7 @@ OnScreenDialog::OnScreenDialog(bool isRecord) : Dialog("OnScreenDialog") {
 			button->setGfx(g_gui.theme()->getImageSurface(ThemeEngine::kImageStopSmallButton));
 
 		if (isRecord) {
-			button = new PicButtonWidget(this, "OnScreenDialog.EditButton", 0, kEditCmd, 0);
+			button = new PicButtonWidget(this, "OnScreenDialog.EditButton", Common::U32String(""), kEditCmd, 0);
 			button->useThemeTransparency(true);
 
 			if (g_system->getOverlayWidth() > 320)
@@ -80,14 +80,14 @@ OnScreenDialog::OnScreenDialog(bool isRecord) : Dialog("OnScreenDialog") {
 			else
 				button->setGfx(g_gui.theme()->getImageSurface(ThemeEngine::kImageEditSmallButton));
 		} else {
-			button = new PicButtonWidget(this, "OnScreenDialog.SwitchModeButton", 0, kSwitchModeCmd, 0);
+			button = new PicButtonWidget(this, "OnScreenDialog.SwitchModeButton", Common::U32String(""), kSwitchModeCmd, 0);
 			button->useThemeTransparency(true);
 			if (g_system->getOverlayWidth() > 320)
 				button->setGfx(g_gui.theme()->getImageSurface(ThemeEngine::kImageSwitchModeButton));
 			else
 				button->setGfx(g_gui.theme()->getImageSurface(ThemeEngine::kImageSwitchModeSmallButton));
 
-			button = new PicButtonWidget(this, "OnScreenDialog.FastReplayButton", 0, kFastModeCmd, 0);
+			button = new PicButtonWidget(this, "OnScreenDialog.FastReplayButton", Common::U32String(""), kFastModeCmd, 0);
 			button->useThemeTransparency(true);
 			if (g_system->getOverlayWidth() > 320)
 				button->setGfx(g_gui.theme()->getImageSurface(ThemeEngine::kImageFastReplayButton));
@@ -98,35 +98,35 @@ OnScreenDialog::OnScreenDialog(bool isRecord) : Dialog("OnScreenDialog") {
 #endif
 	{
 		if (g_system->getOverlayWidth() > 320)
-			new ButtonWidget(this, "OnScreenDialog.StopButton", "[ ]", _("Stop"), kStopCmd);
+			new ButtonWidget(this, "OnScreenDialog.StopButton", Common::U32String("[ ]"), _("Stop"), kStopCmd);
 		else
-			new ButtonWidget(this, "OnScreenDialog.StopButton", "[]", _("Stop"), kStopCmd);
+			new ButtonWidget(this, "OnScreenDialog.StopButton", Common::U32String("[]"), _("Stop"), kStopCmd);
 
 		if (isRecord) {
-			new ButtonWidget(this, "OnScreenDialog.EditButton", "E", _("Edit record description"), kEditCmd);
+			new ButtonWidget(this, "OnScreenDialog.EditButton", Common::U32String("E"), _("Edit record description"), kEditCmd);
 		} else {
-			new ButtonWidget(this, "OnScreenDialog.SwitchModeButton", "G", _("Switch to Game"), kSwitchModeCmd);
+			new ButtonWidget(this, "OnScreenDialog.SwitchModeButton", Common::U32String("G"), _("Switch to Game"), kSwitchModeCmd);
 
-			new ButtonWidget(this, "OnScreenDialog.FastReplayButton", ">>", _("Fast replay"), kFastModeCmd);
+			new ButtonWidget(this, "OnScreenDialog.FastReplayButton", Common::U32String(">>"), _("Fast replay"), kFastModeCmd);
 		}
 	}
 
 
-	_text = new GUI::StaticTextWidget(this, "OnScreenDialog.TimeLabel", "00:00:00");
+	_text = new GUI::StaticTextWidget(this, "OnScreenDialog.TimeLabel", Common::U32String("00:00:00"));
 	_enableDrag = false;
 	_mouseOver = false;
 	_editDlgShown = false;
 
 	_lastTime = 0;
-	_dlg = 0;
+	_dlg = nullptr;
 }
 
 void OnScreenDialog::handleCommand(CommandSender *sender, uint32 cmd, uint32 data) {
-	Common::Event eventRTL;
+	Common::Event eventReturnToLauncher;
 	switch (cmd) {
 	case kStopCmd:
-		eventRTL.type = Common::EVENT_RTL;
-		g_system->getEventManager()->pushEvent(eventRTL);
+		eventReturnToLauncher.type = Common::EVENT_RETURN_TO_LAUNCHER;
+		g_system->getEventManager()->pushEvent(eventReturnToLauncher);
 		close();
 		break;
 	case kEditCmd:
@@ -152,6 +152,8 @@ void OnScreenDialog::handleCommand(CommandSender *sender, uint32 cmd, uint32 dat
 		break;
 	case kFastModeCmd:
 		g_eventRec.switchFastMode();
+		break;
+	default:
 		break;
 	}
 }

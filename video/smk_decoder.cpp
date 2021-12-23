@@ -675,6 +675,8 @@ void SmackerDecoder::SmackerVideoTrack::decodeFrame(Common::BitStreamMemory8LSB 
 							}
 						}
 						break;
+					default:
+						break;
 				}
 				++block;
 			}
@@ -695,6 +697,8 @@ void SmackerDecoder::SmackerVideoTrack::decodeFrame(Common::BitStreamMemory8LSB 
 				}
 				++block;
 			}
+			break;
+		default:
 			break;
 		}
 	}
@@ -868,7 +872,6 @@ SmackerDecoder::SmackerVideoTrack *SmackerDecoder::createVideoTrack(uint32 width
 	return new SmackerVideoTrack(width, height, frameCount, frameRate, flags, signature);
 }
 
-// ResidualVM-specific function
 Common::Rational SmackerDecoder::getFrameRate() const {
 	const SmackerVideoTrack *videoTrack = (const SmackerVideoTrack *)getTrack(0);
 

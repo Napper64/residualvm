@@ -8,11 +8,25 @@
 TESTS        := $(srcdir)/test/common/*.h $(srcdir)/test/audio/*.h $(srcdir)/test/math/*.h
 TEST_LIBS    := audio/libaudio.a math/libmath.a common/libcommon.a
 
+ifeq ($(ENABLE_WINTERMUTE), STATIC_PLUGIN)
+	TESTS += $(srcdir)/test/engines/wintermute/*.h
+	TEST_LIBS += engines/wintermute/libwintermute.a
+endif
+
+ifeq ($(ENABLE_ULTIMA), STATIC_PLUGIN)
+	TESTS += $(srcdir)/test/engines/ultima/*/*/*.h
+	TEST_LIBS += engines/ultima/libultima.a
+endif
+
 #
 TEST_FLAGS   := --runner=StdioPrinter --no-std --no-eh --include=$(srcdir)/test/cxxtest_mingw.h
 TEST_CFLAGS  := $(CFLAGS) -I$(srcdir)/test/cxxtest
 TEST_LDFLAGS := $(LDFLAGS) $(LIBS)
 TEST_CXXFLAGS := $(filter-out -Wglobal-constructors,$(CXXFLAGS))
+
+ifdef WIN32
+TEST_LDFLAGS := $(filter-out -mwindows,$(TEST_LDFLAGS))
+endif
 
 ifdef N64
 TEST_LDFLAGS := $(filter-out -mno-crt0,$(TEST_LDFLAGS))

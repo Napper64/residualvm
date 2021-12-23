@@ -51,6 +51,7 @@
 #include "common/textconsole.h"
 #include "common/tokenizer.h"
 #include "common/translation.h"
+#include "common/text-to-speech.h"
 #include "common/osd_message_queue.h"
 
 #include "gui/gui-manager.h"
@@ -66,7 +67,10 @@
 #include "graphics/fonts/ttf.h"
 #endif
 
+#include "backends/keymapper/action.h"
+#include "backends/keymapper/keymap.h"
 #include "backends/keymapper/keymapper.h"
+
 #ifdef USE_CLOUD
 #ifdef USE_LIBCURL
 #include "backends/cloud/cloudmanager.h"
@@ -77,9 +81,7 @@
 #endif
 #endif
 
-#if defined(_WIN32_WCE)
-#include "backends/platform/wince/CELauncherDialog.h"
-#elif defined(__DC__)
+#if defined(__DC__)
 #include "backends/platform/dc/DCLauncherDialog.h"
 #else
 #include "gui/launcher.h"
@@ -96,9 +98,7 @@ static bool launcherDialog() {
 	// blindly be passed to the first game launched from the launcher.
 	ConfMan.getDomain(Common::ConfigManager::kTransientDomain)->clear();
 
-#if defined(_WIN32_WCE)
-	CELauncherDialog dlg;
-#elif defined(__DC__)
+#if defined(__DC__)
 	DCLauncherDialog dlg;
 #else
 	GUI::LauncherDialog dlg;
@@ -107,48 +107,61 @@ static bool launcherDialog() {
 }
 
 static const Plugin *detectPlugin() {
-	const Plugin *plugin = nullptr;
+	// Figure out the engine ID and game ID
+	Common::String engineId = ConfMan.get("engineid");
+	Common::String gameId = ConfMan.get("gameid");
 
-	// Make sure the gameid is set in the config manager, and that it is lowercase.
-	Common::String gameid(ConfMan.getActiveDomainName());
-	assert(!gameid.empty());
-	if (ConfMan.hasKey("gameid")) {
-		gameid = ConfMan.get("gameid");
+	// Print text saying what's going on
+	printf("User picked target '%s' (engine ID '%s', game ID '%s')...\n", ConfMan.getActiveDomainName().c_str(), engineId.c_str(), gameId.c_str());
 
-		// Set last selected game, that the game will be highlighted
-		// on RTL
-		ConfMan.set("lastselectedgame", ConfMan.getActiveDomainName(), Common::ConfigManager::kApplicationDomain);
-		ConfMan.flushToDisk();
+	// At this point the engine ID and game ID must be known
+	if (engineId.empty()) {
+		warning("The engine ID is not set for target '%s'", ConfMan.getActiveDomainName().c_str());
+		return 0;
 	}
 
-	gameid.toLowercase();
-	ConfMan.set("gameid", gameid);
+	if (gameId.empty()) {
+		warning("The game ID is not set for target '%s'", ConfMan.getActiveDomainName().c_str());
+		return 0;
+	}
 
-	// Query the plugins and find one that will handle the specified gameid
-	printf("User picked target '%s' (gameid '%s')...\n", ConfMan.getActiveDomainName().c_str(), gameid.c_str());
-	printf("  Looking for a plugin supporting this gameid... ");
+	const Plugin *plugin = EngineMan.findPlugin(engineId);
+	if (!plugin) {
+		warning("'%s' is an invalid engine ID. Use the --list-engines command to list supported engine IDs", engineId.c_str());
+		return 0;
+	}
 
-	PlainGameDescriptor game = EngineMan.findGame(gameid, &plugin);
-
-	if (plugin == 0) {
-		printf("failed\n");
-		warning("%s is an invalid gameid. Use the --list-games option to list supported gameid", gameid.c_str());
-	} else {
-		printf("%s\n  Starting '%s'\n", plugin->getName(), game.description);
+	// Query the plugin for the game descriptor
+	printf("   Looking for a plugin supporting this target... %s\n", plugin->getName());
+	PlainGameDescriptor game = plugin->get<MetaEngineStatic>().findGame(gameId.c_str());
+	if (!game.gameId) {
+		warning("'%s' is an invalid game ID for the engine '%s'. Use the --list-games option to list supported game IDs", gameId.c_str(), engineId.c_str());
+		return 0;
 	}
 
 	return plugin;
 }
 
+void saveLastLaunchedTarget(const Common::String &target) {
+	if (ConfMan.hasGameDomain(target)) {
+		// Set the last selected game, so the game will be highlighted next time the user
+		// returns to the launcher.
+		ConfMan.set("lastselectedgame", target, Common::ConfigManager::kApplicationDomain);
+		ConfMan.flushToDisk();
+	}
+}
+
 // TODO: specify the possible return values here
 static Common::Error runGame(const Plugin *plugin, OSystem &system, const Common::String &edebuglevels) {
+	assert(plugin);
+
 	// Determine the game data path, for validation and error messages
 	Common::FSNode dir(ConfMan.get("path"));
+	Common::String target = ConfMan.getActiveDomainName();
 	Common::Error err = Common::kNoError;
 	Engine *engine = 0;
 
-// Disabled in ResidualVM:
-#if 0//defined(SDL_BACKEND) && defined(USE_OPENGL) && defined(USE_RGB_COLOR)
+#if defined(SDL_BACKEND) && defined(USE_OPENGL) && defined(USE_RGB_COLOR)
 	// HACK: We set up the requested graphics mode setting here to allow the
 	// backend to switch from Surface SDL to OpenGL if necessary. This is
 	// needed because otherwise the g_system->getSupportedFormats might return
@@ -162,25 +175,33 @@ static Common::Error runGame(const Plugin *plugin, OSystem &system, const Common
 #endif
 
 	// Verify that the game path refers to an actual directory
-        if (!dir.exists()) {
+	if (!dir.exists()) {
 		err = Common::kPathDoesNotExist;
-        } else if (!dir.isDirectory()) {
+	} else if (!dir.isDirectory()) {
 		err = Common::kPathNotDirectory;
-        }
+	}
 
-	// Create the game engine
+	// Create the game's MetaEngine.
+	const MetaEngineStatic &metaEngine = plugin->get<MetaEngineStatic>();
 	if (err.getCode() == Common::kNoError) {
-		const MetaEngine &metaEngine = plugin->get<MetaEngine>();
 		// Set default values for all of the custom engine options
 		// Apparently some engines query them in their constructor, thus we
 		// need to set this up before instance creation.
-		const ExtraGuiOptions engineOptions = metaEngine.getExtraGuiOptions(Common::String());
-		for (uint i = 0; i < engineOptions.size(); i++) {
-			ConfMan.registerDefault(engineOptions[i].configOption, engineOptions[i].defaultState);
-		}
-
-		err = metaEngine.createInstance(&system, &engine);
+		metaEngine.registerDefaultSettings(target);
 	}
+
+	// Right now we have a MetaEngine plugin. We must find the matching engine plugin to
+	// call createInstance and other connecting functions.
+	Plugin *enginePluginToLaunchGame = PluginMan.getEngineFromMetaEngine(plugin);
+
+	if (!enginePluginToLaunchGame) {
+		err = Common::kEnginePluginNotFound;
+		return err;
+	}
+
+	// Create the game's MetaEngineConnect.
+	const MetaEngine &metaEngineConnect = enginePluginToLaunchGame->get<MetaEngine>();
+	err = metaEngineConnect.createInstance(&system, &engine);
 
 	// Check for errors
 	if (!engine || err.getCode() != Common::kNoError) {
@@ -190,7 +211,7 @@ static Common::Error runGame(const Plugin *plugin, OSystem &system, const Common
 		warning("%s failed to instantiate engine: %s (target '%s', path '%s')",
 			plugin->getName(),
 			err.getDesc().c_str(),
-			ConfMan.getActiveDomainName().c_str(),
+			target.c_str(),
 			dir.getPath().c_str()
 			);
 
@@ -198,7 +219,7 @@ static Common::Error runGame(const Plugin *plugin, OSystem &system, const Common
 		// so it not visible in the launcher.
 		// Temporary targets are created when starting games from the command line using the game id.
 		if (ConfMan.hasKey("id_came_from_command_line")) {
-			ConfMan.removeGameDomain(ConfMan.getActiveDomainName().c_str());
+			ConfMan.removeGameDomain(target.c_str());
 		}
 
 		return err;
@@ -208,13 +229,13 @@ static Common::Error runGame(const Plugin *plugin, OSystem &system, const Common
 	Common::String caption(ConfMan.get("description"));
 
 	if (caption.empty()) {
-		PlainGameDescriptor game = EngineMan.findGame(ConfMan.get("gameid"));
+		PlainGameDescriptor game = metaEngine.findGame(ConfMan.get("gameid").c_str());
 		if (game.description) {
 			caption = game.description;
 		}
 	}
 	if (caption.empty())
-		caption = ConfMan.getActiveDomainName(); // Use the domain (=target) name
+		caption = target;
 	if (!caption.empty())	{
 		system.setWindowCaption(caption.c_str());
 	}
@@ -252,7 +273,7 @@ static Common::Error runGame(const Plugin *plugin, OSystem &system, const Common
 		if (token.equalsIgnoreCase("all"))
 			DebugMan.enableAllDebugChannels();
 		else if (!DebugMan.enableDebugChannel(token))
-			warning(_("Engine does not support debug level '%s'"), token.c_str());
+			warning("Engine does not support debug level '%s'", token.c_str());
 	}
 
 #ifdef USE_TRANSLATION
@@ -261,11 +282,21 @@ static Common::Error runGame(const Plugin *plugin, OSystem &system, const Common
 	    && ConfMan.getBool("gui_use_game_language")
 	    && ConfMan.hasKey("language")) {
 		TransMan.setLanguage(ConfMan.get("language"));
+#ifdef USE_TTS
+		Common::TextToSpeechManager *ttsMan;
+		if ((ttsMan = g_system->getTextToSpeechManager()) != nullptr) {
+			ttsMan->setLanguage(ConfMan.get("language"));
+		}
+#endif // USE_TTS
 	}
-#endif
+#endif // USE_TRANSLATION
 
 	// Initialize any game-specific keymaps
-	engine->initKeymap();
+	Common::KeymapArray gameKeymaps = metaEngineConnect.initKeymaps(target.c_str());
+	Common::Keymapper *keymapper = system.getEventManager()->getKeymapper();
+	for (uint i = 0; i < gameKeymaps.size(); i++) {
+		keymapper->addGameKeymap(gameKeymaps[i]);
+	}
 
 	// Inform backend that the engine is about to be run
 	system.engineInit();
@@ -277,7 +308,7 @@ static Common::Error runGame(const Plugin *plugin, OSystem &system, const Common
 	system.engineDone();
 
 	// Clean up any game-specific keymaps
-	engine->deinitKeymap();
+	keymapper->cleanupGameKeymaps();
 
 	// Free up memory
 	delete engine;
@@ -290,7 +321,13 @@ static Common::Error runGame(const Plugin *plugin, OSystem &system, const Common
 
 #ifdef USE_TRANSLATION
 	TransMan.setLanguage(previousLanguage);
-#endif
+#ifdef USE_TTS
+		Common::TextToSpeechManager *ttsMan;
+		if ((ttsMan = g_system->getTextToSpeechManager()) != nullptr) {
+			ttsMan->setLanguage(ConfMan.get("language"));
+		}
+#endif // USE_TTS
+#endif // USE_TRANSLATION
 
 	// Return result (== 0 means no error)
 	return result;
@@ -303,7 +340,6 @@ static void setupGraphics(OSystem &system) {
 		system.setGraphicsMode(ConfMan.get("gfx_mode").c_str());
 
 		system.initSize(320, 200);
-		system.launcherInitSize(640, 480); //ResidualVM specific
 
 		if (ConfMan.hasKey("aspect_ratio"))
 			system.setFeatureState(OSystem::kFeatureAspectRatioCorrection, ConfMan.getBool("aspect_ratio"));
@@ -313,6 +349,8 @@ static void setupGraphics(OSystem &system) {
 			system.setFeatureState(OSystem::kFeatureFilteringMode, ConfMan.getBool("filtering"));
 		if (ConfMan.hasKey("stretch_mode"))
 			system.setStretchMode(ConfMan.get("stretch_mode").c_str());
+		if (ConfMan.hasKey("shader"))
+			system.setShader(ConfMan.get("shader").c_str());
 	system.endGFXTransaction();
 
 	// When starting up launcher for the first time, the user might have specified
@@ -329,54 +367,27 @@ static void setupGraphics(OSystem &system) {
 }
 
 static void setupKeymapper(OSystem &system) {
-#ifdef ENABLE_KEYMAPPER
 	using namespace Common;
 
 	Keymapper *mapper = system.getEventManager()->getKeymapper();
+	mapper->clear();
 
+	// Query the backend for hardware keys and default bindings and register them
 	HardwareInputSet *inputSet = system.getHardwareInputSet();
+	KeymapperDefaultBindings *backendDefaultBindings = system.getKeymapperDefaultBindings();
 
-	// Query backend for hardware keys and register them
-	mapper->registerHardwareInputSet(inputSet);
+	mapper->registerHardwareInputSet(inputSet, backendDefaultBindings);
 
-	// Now create the global keymap
-	Keymap *primaryGlobalKeymap = new Keymap(kGlobalKeymapName);
-	Action *act;
-	act = new Action(primaryGlobalKeymap, "MENU", _("Menu"));
-	act->addEvent(EVENT_MAINMENU);
-
-	act = new Action(primaryGlobalKeymap, "SKCT", _("Skip"));
-	act->addKeyEvent(KeyState(KEYCODE_ESCAPE, ASCII_ESCAPE, 0));
-
-	act = new Action(primaryGlobalKeymap, "PAUS", _("Pause"));
-	act->addKeyEvent(KeyState(KEYCODE_SPACE, ' ', 0));
-
-	act = new Action(primaryGlobalKeymap, "SKLI", _("Skip line"));
-	act->addKeyEvent(KeyState(KEYCODE_PERIOD, '.', 0));
-
-#ifdef ENABLE_VKEYBD
-	act = new Action(primaryGlobalKeymap, "VIRT", _("Display keyboard"));
-	act->addEvent(EVENT_VIRTUAL_KEYBOARD);
-#endif
-
-	act = new Action(primaryGlobalKeymap, "REMP", _("Remap keys"));
-	act->addEvent(EVENT_KEYMAPPER_REMAP);
-
-	act = new Action(primaryGlobalKeymap, "FULS", _("Toggle fullscreen"));
-	act->addKeyEvent(KeyState(KEYCODE_RETURN, ASCII_RETURN, KBD_ALT));
-
-	mapper->addGlobalKeymap(primaryGlobalKeymap);
-	mapper->pushKeymap(kGlobalKeymapName, true);
+	Keymap *primaryGlobalKeymap = system.getEventManager()->getGlobalKeymap();
+	if (primaryGlobalKeymap) {
+		mapper->addGlobalKeymap(primaryGlobalKeymap);
+	}
 
 	// Get the platform-specific global keymap (if it exists)
-	Keymap *platformGlobalKeymap = system.getGlobalKeymap();
-	if (platformGlobalKeymap) {
-		String platformGlobalKeymapName = platformGlobalKeymap->getName();
-		mapper->addGlobalKeymap(platformGlobalKeymap);
-		mapper->pushKeymap(platformGlobalKeymapName, true);
+	KeymapArray platformKeymaps = system.getGlobalKeymaps();
+	for (uint i = 0; i < platformKeymaps.size(); i++) {
+		mapper->addGlobalKeymap(platformKeymaps[i]);
 	}
-#endif
-
 }
 
 extern "C" int scummvm_main(int argc, const char * const argv[]) {
@@ -425,8 +436,10 @@ extern "C" int scummvm_main(int argc, const char * const argv[]) {
 		gDebugChannelsOnly = true;
 
 
+	ConfMan.registerDefault("always_run_fallback_detection_extern", true);
 	PluginManager::instance().init();
  	PluginManager::instance().loadAllPlugins(); // load plugins for cached plugin manager
+	PluginManager::instance().loadDetectionPlugin(); // load detection plugin for uncached plugin manager
 
 	// If we received an invalid music parameter via command line we check this here.
 	// We can't check this before loading the music plugins.
@@ -448,6 +461,19 @@ extern "C" int scummvm_main(int argc, const char * const argv[]) {
 			warning("%s", res.getDesc().c_str());
 		return res.getCode();
 	}
+
+	if (settings.contains("dump-midi")) {
+		// Store this command line setting in ConfMan, since all transient settings are destroyed
+		ConfMan.registerDefault("dump_midi", true);
+	}
+
+// ResidualVM start:
+#if defined(USE_OPENGL)
+	ConfMan.set("gfx_mode", "opengl");
+#else
+	ConfMan.set("gfx_mode", "normal");
+#endif
+// ResidualVM end
 
 	// Init the backend. Must take place after all config data (including
 	// the command line params) was read.
@@ -521,12 +547,27 @@ extern "C" int scummvm_main(int argc, const char * const argv[]) {
 	// work as well as it should. In theory everything should be destroyed
 	// cleanly, so this is now enabled to encourage people to fix bits :)
 	while (0 != ConfMan.getActiveDomain()) {
-		// Try to find a plugin which feels responsible for the specified game.
+		saveLastLaunchedTarget(ConfMan.getActiveDomainName());
+
+		EngineMan.upgradeTargetIfNecessary(ConfMan.getActiveDomainName());
+
+		// Try to find a MetaEnginePlugin which feels responsible for the specified game.
 		const Plugin *plugin = detectPlugin();
 		if (plugin) {
-			// Unload all plugins not needed for this game,
-			// to save memory
-			PluginManager::instance().unloadPluginsExcept(PLUGIN_TYPE_ENGINE, plugin);
+			// Unload all plugins not needed for this game, to save memory
+
+			// Right now, we have a MetaEngine plugin, and we want to unload all except Engine.
+			// First, get the relevant Engine plugin from MetaEngine.
+			const Plugin *enginePlugin = PluginMan.getEngineFromMetaEngine(plugin);
+
+			// Then, pass in the pointer to enginePlugin, with the matching type, so our function behaves as-is.
+			PluginManager::instance().unloadPluginsExcept(PLUGIN_TYPE_ENGINE, enginePlugin);
+
+#if defined(UNCACHED_PLUGINS) && defined(DYNAMIC_MODULES)
+			// Unload all MetaEngines not needed for the current engine, if we're using uncached plugins
+			// to save extra memory.
+			PluginManager::instance().unloadPluginsExcept(PLUGIN_TYPE_METAENGINE, plugin);
+#endif
 
 #ifdef ENABLE_EVENTRECORDER
 			Common::String recordMode = ConfMan.get("record_mode");
@@ -543,8 +584,20 @@ extern "C" int scummvm_main(int argc, const char * const argv[]) {
 				break;
 			}
 #endif
+#ifdef USE_TTS
+			Common::TextToSpeechManager *ttsMan = g_system->getTextToSpeechManager();
+			if (ttsMan != nullptr) {
+				ttsMan->pushState();
+			}
+#endif
 			// Try to run the game
 			Common::Error result = runGame(plugin, system, specialDebug);
+
+#ifdef USE_TTS
+			if (ttsMan != nullptr) {
+				ttsMan->popState();
+			}
+#endif
 
 #ifdef ENABLE_EVENTRECORDER
 			// Flush Event recorder file. The recorder does not get reinitialized for next game
@@ -555,8 +608,11 @@ extern "C" int scummvm_main(int argc, const char * const argv[]) {
 #if defined(UNCACHED_PLUGINS) && defined(DYNAMIC_MODULES)
 			// do our best to prevent fragmentation by unloading as soon as we can
 			PluginManager::instance().unloadPluginsExcept(PLUGIN_TYPE_ENGINE, NULL, false);
+			PluginManager::instance().unloadDetectionPlugin();
 			// reallocate the config manager to get rid of any fragmentation
 			ConfMan.defragment();
+			// The keymapper keeps pointers to the configuration domains. It needs to be reinitialized.
+			setupKeymapper(system);
 #endif
 
 			// Did an error occur ?
@@ -566,13 +622,13 @@ extern "C" int scummvm_main(int argc, const char * const argv[]) {
 			}
 
 			// Quit unless an error occurred, or Return to launcher was requested
-#ifndef FORCE_RTL
-			if (result.getCode() == Common::kNoError && !g_system->getEventManager()->shouldRTL())
+#ifndef FORCE_RETURN_TO_LAUNCHER
+			if (result.getCode() == Common::kNoError && !g_system->getEventManager()->shouldReturnToLauncher())
 				break;
 #endif
-			// Reset RTL flag in case we want to load another engine
-			g_system->getEventManager()->resetRTL();
-#ifdef FORCE_RTL
+			// Reset the return to launcher flag in case we want to load another engine
+			g_system->getEventManager()->resetReturnToLauncher();
+#ifdef FORCE_RETURN_TO_LAUNCHER
 			g_system->getEventManager()->resetQuit();
 #endif
 #ifdef ENABLE_EVENTRECORDER
@@ -607,7 +663,8 @@ extern "C" int scummvm_main(int argc, const char * const argv[]) {
 				ConfMan.setActiveDomain("");
 			}
 
-			PluginManager::instance().loadAllPlugins(); // only for cached manager
+			PluginManager::instance().loadAllPluginsOfType(PLUGIN_TYPE_ENGINE); // only for cached manager
+			PluginManager::instance().loadDetectionPlugin(); // only for uncached manager
 		} else {
 			GUI::displayErrorDialog(_("Could not find any engine capable of running the selected game"));
 
@@ -631,6 +688,7 @@ extern "C" int scummvm_main(int argc, const char * const argv[]) {
 	Cloud::CloudManager::destroy();
 #endif
 #endif
+	PluginManager::instance().unloadDetectionPlugin();
 	PluginManager::instance().unloadAllPlugins();
 	PluginManager::destroy();
 	GUI::GuiManager::destroy();

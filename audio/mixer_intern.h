@@ -51,7 +51,7 @@ namespace Audio {
 class MixerImpl : public Mixer {
 private:
 	enum {
-		NUM_CHANNELS = 32 // ResidualVM specific
+		NUM_CHANNELS = 32
 	};
 
 	Common::Mutex _mutex;
@@ -73,10 +73,10 @@ private:
 
 public:
 
-	MixerImpl(OSystem *system, uint sampleRate);
+	MixerImpl(uint sampleRate);
 	~MixerImpl();
 
-	virtual bool isReady() const { return _mixerReady; }
+	virtual bool isReady() const { Common::StackLock lock(_mutex); return _mixerReady; }
 
 	virtual void playStream(
 		SoundType type,

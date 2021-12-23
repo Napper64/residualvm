@@ -35,10 +35,6 @@
 	#define GCC_ATLEAST(major, minor) 0
 #endif
 
-#if defined(_WIN32_WCE) && _WIN32_WCE < 300
-	#define NONSTANDARD_PORT
-#endif
-
 #if defined(NONSTANDARD_PORT)
 
 	// Ports which need to perform #includes and #defines visible in
@@ -89,8 +85,6 @@
 		}
 		#endif
 
-		#if !defined(_WIN32_WCE)
-
 		#define WIN32_LEAN_AND_MEAN		// Exclude rarely-used stuff from Windows headers
 		#define NOGDICAPMASKS
 		#define OEMRESOURCE
@@ -114,8 +108,6 @@
 		#define NOWH
 		#define NOSOUND
 		#define NODRAWTEXT
-
-		#endif
 
 	#endif
 
@@ -280,18 +272,17 @@
 		  defined(__DS__) || \
 		  defined(__3DS__) || \
 		  defined(IPHONE) || \
-		  defined(__PLAYSTATION2__) || \
 		  defined(__PSP__) || \
 		  defined(__SYMBIAN32__)
 
 		#define SCUMM_LITTLE_ENDIAN
 		#define SCUMM_NEED_ALIGNMENT
 
-	#elif defined(_WIN32_WCE) || defined(_MSC_VER) || defined(__MINGW32__)
+	#elif defined(_MSC_VER) || defined(__MINGW32__)
 
 		#define SCUMM_LITTLE_ENDIAN
 
-	#elif defined(__amigaos4__) || defined(__N64__) || defined(__WII__)
+	#elif defined(__MORPHOS__) || defined(__amigaos4__) || defined(__N64__) || defined(__WII__)
 
 		#define SCUMM_BIG_ENDIAN
 		#define SCUMM_NEED_ALIGNMENT
@@ -372,7 +363,7 @@
 #endif
 
 #ifndef PLUGIN_EXPORT
-	#if defined(_MSC_VER) || defined(_WIN32_WCE) || defined(__MINGW32__)
+	#if defined(_MSC_VER) || defined(__MINGW32__)
 		#define PLUGIN_EXPORT __declspec(dllexport)
 	#else
 		#define PLUGIN_EXPORT
@@ -415,11 +406,6 @@
 	#endif
 #endif
 
-// ResidualVM specific:
-#ifndef LOCAL_PI
-#define LOCAL_PI 3.14159265358979323846
-#endif
-
 #ifndef MAXPATHLEN
 #define MAXPATHLEN 256
 #endif
@@ -451,13 +437,8 @@
 	typedef unsigned int uint32;
 	typedef signed int int32;
 	typedef unsigned int uint;
-	#ifdef __PLAYSTATION2__
-	typedef signed long int64;
-	typedef unsigned long uint64;
-	#else
 	typedef signed long long int64;
 	typedef unsigned long long uint64;
-	#endif
 #endif
 
 //
@@ -470,7 +451,8 @@
 		  defined(_M_X64) || \
 		  defined(__ppc64__) || \
 		  defined(__powerpc64__) || \
-		  defined(__LP64__)
+		  defined(__LP64__) || \
+		  defined(_M_ARM64)
 
 typedef uint64 uintptr;
 

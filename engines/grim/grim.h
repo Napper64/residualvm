@@ -33,6 +33,7 @@
 
 #include "engines/grim/textobject.h"
 #include "engines/grim/iris.h"
+#include "engines/grim/detection.h"
 
 namespace Grim {
 
@@ -45,16 +46,9 @@ class ObjectState;
 class Set;
 class TextObject;
 class PrimitiveObject;
-class Debugger;
 class LuaBase;
+class Commentary;
 class GfxBase;
-
-enum GrimGameType {
-	GType_GRIM,
-	GType_MONKEY4
-};
-
-struct GrimGameDescription;
 
 struct ControlDescriptor {
 	const char *name;
@@ -66,7 +60,6 @@ class GrimEngine : public Engine {
 protected:
 	// Engine APIs
 	virtual Common::Error run() override;
-	virtual GUI::Debugger *getDebugger() override { return (GUI::Debugger *)_debugger; }
 
 public:
 	enum EngineMode {
@@ -163,8 +156,24 @@ public:
 	bool areActorsTalking() const;
 	void immediatelyRemoveActor(Actor *actor);
 
+	void drawMovieSubtitle();
 	void setMovieSubtitle(TextObject *to);
 	void setMovieSetup();
+
+	int getLanguage() const { return _language; }
+	void setLanguage(int langId) { _language = langId; }
+	Common::String getLanguagePrefix() const;
+	
+	bool isConceptEnabled(uint32 number) const;
+	void enableConcept(uint32 number);
+	
+	bool isCutsceneEnabled(uint32 number) const;
+	void enableCutscene(uint32 number);
+
+	Commentary *getCommentary() { return _commentary; }
+
+	// TODO: Refactor.
+	void setSaveMetaData(const char*, int, const char*);
 
 	void saveGame(const Common::String &file);
 	void loadGame(const Common::String &file);
@@ -174,6 +183,9 @@ public:
 	// Engine APIs
 	bool hasFeature(EngineFeature f) const override;
 
+	static Common::Array<Common::Keymap *> initKeymapsGrim(const char *target);
+	static Common::Array<Common::Keymap *> initKeymapsEMI(const char *target);
+
 	Common::StringArray _listFiles;
 	Common::StringArray::const_iterator _listFilesIter;
 
@@ -181,14 +193,13 @@ public:
 
 	void debugLua(const Common::String &str);
 
-	void setSideTextures(const Common::String &setup);
-
 protected:
 	virtual void pauseEngineIntern(bool pause) override;
 
 	void handleControls(Common::EventType type, const Common::KeyState &key);
 	void handleChars(Common::EventType type, const Common::KeyState &key);
 	void handleJoyAxis(byte axis, int16 position);
+	void handleMouseAxis(byte axis, int16 position);
 	void handleJoyButton(Common::EventType type, byte button);
 	void handleExit();
 	void handlePause();
@@ -210,6 +221,7 @@ protected:
 	void savegameRestore();
 	void restoreGRIM();
 
+	virtual void storeSaveGameMetadata(SaveGame *state);
 	virtual void storeSaveGameImage(SaveGame *savedState);
 
 	bool _savegameLoadRequest;
@@ -257,8 +269,24 @@ protected:
 	GrimGameType _gameType;
 	Common::Platform _gamePlatform;
 	Common::Language _gameLanguage;
-	Debugger *_debugger;
 	uint32 _pauseStartTime;
+
+	// Remastered;
+	uint32 _language;
+	static const uint32 kNumConcepts = 98;
+	static const uint32 kNumCutscenes = 40;
+	bool _cutsceneEnabled[kNumCutscenes]; // TODO, could probably use a different data structure
+	bool _conceptEnabled[kNumConcepts];
+	
+	Common::String _saveMeta1;
+	int _saveMeta2;
+	Common::String _saveMeta3;
+	
+	Commentary *_commentary;
+
+public:
+	int _cursorX;
+	int _cursorY;
 };
 
 extern GrimEngine *g_grim;

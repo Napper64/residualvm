@@ -83,6 +83,10 @@ MODULE_OBJS := \
 	movie/movie.o \
 	movie/quicktime.o \
 	movie/smush.o \
+	remastered/commentary.o \
+	remastered/hotspot.o \
+	remastered/lua_remastered.o \
+	remastered/overlay.o \
 	update/packfile.o \
 	update/mscab.o \
 	update/lang_filter.o \
@@ -115,6 +119,7 @@ MODULE_OBJS := \
 	lua_v1_set.o \
 	lua_v1_sound.o \
 	lua_v1_text.o \
+	metaengine.o \
 	material.o \
 	model.o \
 	objectstate.o \
@@ -147,3 +152,6 @@ endif
 
 # Include common rules
 include $(srcdir)/rules.mk
+
+# Detection objects
+DETECT_OBJS += $(MODULE)/detection.o

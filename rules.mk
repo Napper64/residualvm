@@ -3,6 +3,7 @@
 #
 ###############################################
 
+ifeq ($(LOAD_RULES_MK), 1)
 
 # Copy the list of objects to a new variable. The name of the new variable
 # contains the module name, a trick we use so we can keep multiple different
@@ -47,7 +48,7 @@ ifdef PLUGIN
 PLUGIN-$(MODULE) := plugins/$(PLUGIN_PREFIX)$(notdir $(MODULE))$(PLUGIN_SUFFIX)
 $(PLUGIN-$(MODULE)): $(MODULE_OBJS-$(MODULE)) $(PLUGIN_EXTRA_DEPS)
 	$(QUIET)$(MKDIR) plugins
-	$(QUIET_PLUGIN)$(CXX) $(filter-out $(PLUGIN_EXTRA_DEPS),$+) $(PLUGIN_LDFLAGS) -o $@
+	$(QUIET_PLUGIN)$(CXX) $(SAVED_LDFLAGS) $(filter-out $(PLUGIN_EXTRA_DEPS),$+) $(PLUGIN_LDFLAGS) -o $@
 
 # Reset PLUGIN var
 PLUGIN:=
@@ -103,3 +104,5 @@ ifdef SPLIT_DWARF
 endif
 
 .PHONY: clean-$(MODULE) $(MODULE)
+
+endif # LOAD_RULES_MK

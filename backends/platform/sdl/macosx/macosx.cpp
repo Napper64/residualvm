@@ -32,8 +32,10 @@
 #include "backends/platform/sdl/macosx/macosx.h"
 #include "backends/updates/macosx/macosx-updates.h"
 #include "backends/taskbar/macosx/macosx-taskbar.h"
+#include "backends/text-to-speech/macosx/macosx-text-to-speech.h"
 #include "backends/dialogs/macosx/macosx-dialogs.h"
 #include "backends/platform/sdl/macosx/macosx_wrapper.h"
+#include "backends/fs/posix/posix-fs.h"
 
 #include "common/archive.h"
 #include "common/config-manager.h"
@@ -42,11 +44,6 @@
 
 #include "ApplicationServices/ApplicationServices.h"	// for LSOpenFSRef
 #include "CoreFoundation/CoreFoundation.h"	// for CF* stuff
-
-OSystem_MacOSX::OSystem_MacOSX()
-	:
-	OSystem_POSIX("Library/Preferences/ResidualVM Preferences") {
-}
 
 OSystem_MacOSX::~OSystem_MacOSX() {
 	releaseMenu();
@@ -83,6 +80,11 @@ void OSystem_MacOSX::initBackend() {
 #ifdef USE_SPARKLE
 	// Initialize updates manager
 	_updateManager = new MacOSXUpdateManager();
+#endif
+
+#ifdef USE_TTS
+	// Initialize Text to Speech manager
+	_textToSpeechManager = new MacOSXTextToSpeechManager();
 #endif
 
 	// Invoke parent implementation of this method
@@ -137,16 +139,16 @@ bool OSystem_MacOSX::hasTextInClipboard() {
 	return hasTextInClipboardMacOSX();
 }
 
-Common::String OSystem_MacOSX::getTextFromClipboard() {
+Common::U32String OSystem_MacOSX::getTextFromClipboard() {
 	return getTextFromClipboardMacOSX();
 }
 
-bool OSystem_MacOSX::setTextInClipboard(const Common::String &text) {
+bool OSystem_MacOSX::setTextInClipboard(const Common::U32String &text) {
 	return setTextInClipboardMacOSX(text);
 }
 
 bool OSystem_MacOSX::openUrl(const Common::String &url) {
-	CFURLRef urlRef = CFURLCreateWithBytes (NULL, (UInt8*)url.c_str(), url.size(), kCFStringEncodingASCII, NULL);
+	CFURLRef urlRef = CFURLCreateWithBytes (NULL, (const UInt8*)url.c_str(), url.size(), kCFStringEncodingASCII, NULL);
 	OSStatus err = LSOpenCFURLRef(urlRef, NULL);
 	CFRelease(urlRef);
 	return err == noErr;
@@ -197,6 +199,37 @@ Common::String OSystem_MacOSX::getSystemLanguage() const {
 #else // USE_DETECTLANG
 	return OSystem_POSIX::getSystemLanguage();
 #endif // USE_DETECTLANG
+}
+
+Common::String OSystem_MacOSX::getDefaultConfigFileName() {
+	const Common::String baseConfigName = "Library/Preferences/ResidualVM Preferences";
+
+	Common::String configFile;
+
+	Common::String prefix = getenv("HOME");
+
+	if (!prefix.empty() && (prefix.size() + 1 + baseConfigName.size()) < MAXPATHLEN) {
+		configFile = prefix;
+		configFile += '/';
+		configFile += baseConfigName;
+	} else {
+		configFile = baseConfigName;
+	}
+
+	return configFile;
+}
+
+Common::String OSystem_MacOSX::getDefaultLogFileName() {
+	const char *prefix = getenv("HOME");
+	if (prefix == nullptr) {
+		return Common::String();
+	}
+
+	if (!Posix::assureDirectoryExists("Library/Logs", prefix)) {
+		return Common::String();
+	}
+
+	return Common::String(prefix) + "/Library/Logs/residualvm.log";
 }
 
 Common::String OSystem_MacOSX::getScreenshotsPath() {

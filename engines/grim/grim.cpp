@@ -33,6 +33,10 @@
 #include "common/config-manager.h"
 #include "common/translation.h"
 
+#include "backends/keymapper/action.h"
+#include "backends/keymapper/keymap.h"
+#include "backends/keymapper/standard-actions.h"
+
 #include "graphics/pixelbuffer.h"
 #include "graphics/renderer.h"
 
@@ -47,6 +51,7 @@
 #include "image/png.h"
 
 #include "engines/engine.h"
+#include "engines/util.h"
 
 #include "engines/grim/md5check.h"
 #include "engines/grim/md5checkdialog.h"
@@ -71,6 +76,9 @@
 #include "engines/grim/sound.h"
 #include "engines/grim/stuffit.h"
 #include "engines/grim/debugger.h"
+#include "engines/grim/remastered/overlay.h"
+#include "engines/grim/remastered/lua_remastered.h"
+#include "engines/grim/remastered/commentary.h"
 
 #include "engines/grim/imuse/imuse.h"
 #include "engines/grim/emi/sound/emisound.h"
@@ -84,10 +92,10 @@ GfxBase *g_driver = nullptr;
 int g_imuseState = -1;
 
 GrimEngine::GrimEngine(OSystem *syst, uint32 gameFlags, GrimGameType gameType, Common::Platform platform, Common::Language language) :
-		Engine(syst), _currSet(nullptr), _selectedActor(nullptr), _pauseStartTime(0) {
+		Engine(syst), _currSet(nullptr), _selectedActor(nullptr), _pauseStartTime(0), _language(0) {
 	g_grim = this;
 
-	_debugger = new Debugger();
+	setDebugger(new Debugger());
 	_gameType = gameType;
 	_gameFlags = gameFlags;
 	_gamePlatform = platform;
@@ -178,6 +186,22 @@ GrimEngine::GrimEngine(OSystem *syst, uint32 gameFlags, GrimGameType gameType, C
 	SearchMan.addSubDirectoryMatching(gameDataDir, "widescreen");
 
 	Debug::registerDebugChannels();
+	
+	
+	//Remastered:
+	if (getGameFlags() & ADGF_REMASTERED) {
+		for (int i = 0; i < kNumCutscenes; i++) {
+			_cutsceneEnabled[i] = false;
+		}
+		for (int i = 0; i < kNumConcepts; i++) {
+			_conceptEnabled[i] = false;
+		}
+		
+		_saveMeta1 = "";
+		_saveMeta2 = 0;
+		_saveMeta3 = "";
+	}
+	_commentary = nullptr;
 }
 
 GrimEngine::~GrimEngine() {
@@ -208,7 +232,9 @@ GrimEngine::~GrimEngine() {
 	delete g_driver;
 	g_driver = nullptr;
 	delete _iris;
-	delete _debugger;
+
+	// Remastered:
+	delete _commentary;
 
 	ConfMan.flushToDisk();
 	DebugMan.clearAllDebugChannels();
@@ -229,7 +255,11 @@ void GrimEngine::clearPools() {
 }
 
 LuaBase *GrimEngine::createLua() {
-	return new Lua_V1();
+	if (getGameFlags() == ADGF_REMASTERED) {
+		return new Lua_Remastered();
+	} else {
+		return new Lua_V1();
+	}
 }
 
 GfxBase *GrimEngine::createRenderer(int screenW, int screenH, bool fullscreen) {
@@ -238,7 +268,7 @@ GfxBase *GrimEngine::createRenderer(int screenW, int screenH, bool fullscreen) {
 	Graphics::RendererType matchingRendererType = Graphics::getBestMatchingAvailableRendererType(desiredRendererType);
 
 	_softRenderer = matchingRendererType == Graphics::kRendererTypeTinyGL;
-	_system->setupScreen(screenW, screenH, fullscreen, !_softRenderer);
+	initGraphics3d(screenW, screenH, fullscreen, !_softRenderer);
 
 #if defined(USE_OPENGL)
 	// Check the OpenGL context actually supports shaders
@@ -307,14 +337,14 @@ Common::Error GrimEngine::run() {
 	}
 
 	ConfMan.registerDefault("check_gamedata", true);
-	if (ConfMan.getBool("check_gamedata")) {
+	if (ConfMan.getBool("check_gamedata") && getGameFlags() != ADGF_REMASTERED) {
 		MD5CheckDialog d;
 		if (!d.runModal()) {
-			Common::String confirmString = Common::String::format(_(
+			Common::U32String confirmString = Common::U32String::format(_(
 				"ResidualVM found some problems with your game data files.\n"
 				"Running ResidualVM nevertheless may cause game bugs or even crashes.\n"
 				"Do you still want to run %s?"),
-			GType_MONKEY4 == getGameType() ? _("Escape From Monkey Island") : _("Grim Fandango")
+			GType_MONKEY4 == getGameType() ? "Escape From Monkey Island" : "Grim Fandango"
 			 );
 			GUI::MessageDialog msg(confirmString, _("Yes"), _("No"));
 			if (!msg.runModal()) {
@@ -339,6 +369,10 @@ Common::Error GrimEngine::run() {
 	if (getGameType() == GType_GRIM) {
 		g_imuse = new Imuse(20, demo);
 		g_emiSound = nullptr;
+		if (g_grim->getGameFlags() & ADGF_REMASTERED) {
+			// This must happen here, since we need the resource loader set up.
+			_commentary = new Commentary();
+		}
 	} else if (getGameType() == GType_MONKEY4) {
 		g_emiSound = new EMISound(20);
 		g_imuse = nullptr;
@@ -346,7 +380,11 @@ Common::Error GrimEngine::run() {
 	g_sound = new SoundPlayer();
 
 	bool fullscreen = ConfMan.getBool("fullscreen");
-	g_driver = createRenderer(640, 480, fullscreen);
+	if (getGameType() == GType_GRIM && (g_grim->getGameFlags() & ADGF_REMASTERED)) {
+		g_driver = createRenderer(1600, 900, fullscreen);
+	} else {
+		g_driver = createRenderer(640, 480, fullscreen);
+	}
 
 	if (getGameType() == GType_MONKEY4 && SearchMan.hasFile("AMWI.m4b")) {
 		// Play EMI Mac Aspyr logo
@@ -399,6 +437,185 @@ Common::Error GrimEngine::run() {
 	g_grim->mainLoop();
 
 	return Common::kNoError;
+}
+
+Common::KeymapArray GrimEngine::initKeymapsGrim(const char *target) {
+	using namespace Common;
+
+	Keymap *engineKeyMap = new Keymap(Keymap::kKeymapTypeGame, "grim", "Grim Fandango");
+	Action *act;
+
+	act = new Action(kStandardActionMoveUp, _("Up"));
+	act->setKeyEvent(KEYCODE_UP);
+	act->addDefaultInputMapping("JOY_UP");
+	engineKeyMap->addAction(act);
+
+	act = new Action(kStandardActionMoveDown, _("Down"));
+	act->setKeyEvent(KEYCODE_DOWN);
+	act->addDefaultInputMapping("JOY_DOWN");
+	engineKeyMap->addAction(act);
+
+	act = new Action(kStandardActionMoveLeft, _("Left"));
+	act->setKeyEvent(KEYCODE_LEFT);
+	act->addDefaultInputMapping("JOY_LEFT");
+	engineKeyMap->addAction(act);
+
+	act = new Action(kStandardActionMoveRight, _("Right"));
+	act->setKeyEvent(KEYCODE_RIGHT);
+	act->addDefaultInputMapping("JOY_RIGHT");
+	engineKeyMap->addAction(act);
+
+	act = new Action("BRUN", _("Run"));
+	act->setKeyEvent(KeyState(KEYCODE_LSHIFT));
+	act->addDefaultInputMapping("JOY_RIGHT_SHOULDER");
+	engineKeyMap->addAction(act);
+
+	act = new Action("EXAM", _("Examine"));
+	act->setKeyEvent(KeyState(KEYCODE_s, 'e'));
+	act->addDefaultInputMapping("JOY_X");
+	engineKeyMap->addAction(act);
+
+	act = new Action("BUSE", _("Use/Talk"));
+	act->setKeyEvent(KeyState(KEYCODE_w, 'u'));
+	act->addDefaultInputMapping("JOY_A");
+	engineKeyMap->addAction(act);
+
+	act = new Action("PICK", _("Pick up/Put away"));
+	act->setKeyEvent(KeyState(KEYCODE_a, 'p'));
+	act->addDefaultInputMapping("JOY_B");
+	engineKeyMap->addAction(act);
+
+	act = new Action("INVT", _("Invetory"));
+	act->setKeyEvent(KeyState(KEYCODE_d, 'i'));
+	act->addDefaultInputMapping("JOY_Y");
+	engineKeyMap->addAction(act);
+
+	act = new Action("SKLI", _("Skip dialog lines"));
+	act->setKeyEvent(KeyState(KEYCODE_PERIOD, '.'));
+	act->addDefaultInputMapping("PERIOD");
+	act->addDefaultInputMapping("JOY_A");
+	engineKeyMap->addAction(act);
+
+	act = new Action(kStandardActionSkip, _("Skip"));
+	act->setKeyEvent(KeyState(KEYCODE_ESCAPE, ASCII_ESCAPE));
+	act->addDefaultInputMapping("ESCAPE");
+	act->addDefaultInputMapping("JOY_B");
+	engineKeyMap->addAction(act);
+
+	act = new Action("RETURN", _("Confirm"));
+	act->setKeyEvent(KeyState(KEYCODE_RETURN, ASCII_RETURN));
+	act->addDefaultInputMapping("RETURN");
+	act->addDefaultInputMapping("JOY_A");
+	engineKeyMap->addAction(act);
+
+	act = new Action("GMNU", _("Menu"));
+	act->setKeyEvent(KeyState(KEYCODE_F1));
+	act->addDefaultInputMapping("JOY_GUIDE");
+	engineKeyMap->addAction(act);
+
+	act = new Action("QUIT", _("Quit"));
+	act->setKeyEvent(KeyState(KEYCODE_q, 'q'));
+	act->addDefaultInputMapping("JOY_BACK");
+	engineKeyMap->addAction(act);
+
+	return Keymap::arrayOf(engineKeyMap);
+}
+
+Common::KeymapArray GrimEngine::initKeymapsEMI(const char *target) {
+	using namespace Common;
+
+	Keymap *engineKeyMap = new Keymap(Keymap::kKeymapTypeGame, "monkey4", "Escape from the Monkey Island");
+	Action *act;
+
+	act = new Action(kStandardActionMoveUp, _("Up"));
+	act->setKeyEvent(KEYCODE_UP);
+	act->addDefaultInputMapping("JOY_UP");
+	engineKeyMap->addAction(act);
+
+	act = new Action(kStandardActionMoveDown, _("Down"));
+	act->setKeyEvent(KEYCODE_DOWN);
+	act->addDefaultInputMapping("JOY_DOWN");
+	engineKeyMap->addAction(act);
+
+	act = new Action(kStandardActionMoveLeft, _("Left"));
+	act->setKeyEvent(KEYCODE_LEFT);
+	act->addDefaultInputMapping("JOY_LEFT");
+	engineKeyMap->addAction(act);
+
+	act = new Action(kStandardActionMoveRight, _("Right"));
+	act->setKeyEvent(KEYCODE_RIGHT);
+	act->addDefaultInputMapping("JOY_RIGHT");
+	engineKeyMap->addAction(act);
+
+	act = new Action("COUP", _("Cycle Objects Up"));
+	act->setKeyEvent(KeyState(KEYCODE_PAGEUP));
+	act->addDefaultInputMapping("JOY_LEFT_TRIGGER");
+	engineKeyMap->addAction(act);
+
+	act = new Action("CODW", _("Cycle Objects Down"));
+	act->setKeyEvent(KeyState(KEYCODE_PAGEDOWN));
+	act->addDefaultInputMapping("JOY_RIGHT_TRIGGER");
+	engineKeyMap->addAction(act);
+
+	act = new Action("BRUN", _("Run"));
+	act->setKeyEvent(KeyState(KEYCODE_LSHIFT));
+	act->addDefaultInputMapping("JOY_RIGHT_SHOULDER");
+	engineKeyMap->addAction(act);
+
+	act = new Action("QEXT", _("Quick Room Exit"));
+	act->setKeyEvent(KeyState(KEYCODE_o, 'o'));
+	act->addDefaultInputMapping("JOY_LEFT_SHOULDER");
+	engineKeyMap->addAction(act);
+
+	act = new Action("EXAM", _("Examine/Look"));
+	act->setKeyEvent(KeyState(KEYCODE_s, 'e'));
+	act->addDefaultInputMapping("JOY_X");
+	engineKeyMap->addAction(act);
+
+	act = new Action("BUSE", _("Use/Talk"));
+	act->setKeyEvent(KeyState(KEYCODE_w, 'u'));
+	act->addDefaultInputMapping("JOY_A");
+	engineKeyMap->addAction(act);
+
+	act = new Action("PICK", _("Pick up/Put away"));
+	act->setKeyEvent(KeyState(KEYCODE_a, 'p'));
+	act->addDefaultInputMapping("JOY_B");
+	engineKeyMap->addAction(act);
+
+	act = new Action("INVT", _("Invetory"));
+	act->setKeyEvent(KeyState(KEYCODE_d, 'i'));
+	act->addDefaultInputMapping("JOY_Y");
+	engineKeyMap->addAction(act);
+
+	act = new Action("SKLI", _("Skip dialog lines"));
+	act->setKeyEvent(KeyState(KEYCODE_PERIOD, '.'));
+	act->addDefaultInputMapping("PERIOD");
+	act->addDefaultInputMapping("JOY_A");
+	engineKeyMap->addAction(act);
+
+	act = new Action(kStandardActionSkip, _("Skip"));
+	act->setKeyEvent(KeyState(KEYCODE_ESCAPE, ASCII_ESCAPE));
+	act->addDefaultInputMapping("ESCAPE");
+	act->addDefaultInputMapping("JOY_B");
+	engineKeyMap->addAction(act);
+
+	act = new Action("RETURN", _("Confirm"));
+	act->setKeyEvent(KeyState(KEYCODE_RETURN, ASCII_RETURN));
+	act->addDefaultInputMapping("RETURN");
+	act->addDefaultInputMapping("JOY_A");
+	engineKeyMap->addAction(act);
+
+	act = new Action("GMNU", _("Menu"));
+	act->setKeyEvent(KeyState(KEYCODE_F1, 0));
+	act->addDefaultInputMapping("JOY_GUIDE");
+	engineKeyMap->addAction(act);
+
+	act = new Action("QUIT", _("Quit"));
+	act->setKeyEvent(KeyState(KEYCODE_q, 'q'));
+	act->addDefaultInputMapping("JOY_BACK");
+	engineKeyMap->addAction(act);
+
+	return Keymap::arrayOf(engineKeyMap);
 }
 
 void GrimEngine::playAspyrLogo() {
@@ -620,9 +837,9 @@ void GrimEngine::updateDisplayScene() {
 		}
 		// Draw Primitives
 		_iris->draw();
-		if (_movieSubtitle) {
-			_movieSubtitle->draw();
-		}
+
+		g_movie->drawMovieSubtitle();
+
 	} else if (_mode == NormalMode || _mode == OverworldMode) {
 		updateNormalMode();
 	} else if (_mode == DrawMode) {
@@ -691,6 +908,10 @@ void GrimEngine::drawNormalMode() {
 		p->draw();
 	}
 
+	foreach (Overlay *p, Overlay::getPool()) {
+		p->draw();
+	}
+
 	_currSet->setupCamera();
 
 	g_driver->set3DMode();
@@ -698,7 +919,6 @@ void GrimEngine::drawNormalMode() {
 	if (_setupChanged) {
 		cameraPostChangeHandle(_currSet->getSetup());
 		_setupChanged = false;
-		setSideTextures(_currSet->getCurrSetup()->_name.c_str());
 	}
 
 	// Draw actors
@@ -819,8 +1039,6 @@ void GrimEngine::mainLoop() {
 			g_imuse->refreshScripts();
 		}
 
-		_debugger->onFrame();
-
 		// Process events
 		Common::Event event;
 		while (g_system->getEventManager()->pollEvent(event)) {
@@ -874,6 +1092,27 @@ void GrimEngine::mainLoop() {
 				handleJoyAxis(event.joystick.axis, event.joystick.position);
 			if (type == Common::EVENT_JOYBUTTON_DOWN || type == Common::EVENT_JOYBUTTON_UP)
 				handleJoyButton(type, event.joystick.button);
+
+			if (type == Common::EVENT_LBUTTONUP) {
+				_cursorX = event.mouse.x;
+				_cursorY = event.mouse.y;
+				Common::KeyState k;
+				k.keycode = (Common::KeyCode)KEYCODE_MOUSE_B1;
+				handleControls(Common::EVENT_KEYUP, k);
+			}
+			if (type == Common::EVENT_LBUTTONDOWN) {
+				_cursorX = event.mouse.x;
+				_cursorY = event.mouse.y;
+				Common::KeyState k;
+				k.keycode = (Common::KeyCode)KEYCODE_MOUSE_B1;
+				handleControls(Common::EVENT_KEYDOWN, k);
+			}
+			if (type == Common::EVENT_MOUSEMOVE) {
+				_cursorX = event.mouse.x;
+				_cursorY = event.mouse.y;
+				handleMouseAxis(0, _cursorX);
+				handleMouseAxis(1, _cursorY);
+			}
 			if (type == Common::EVENT_SCREEN_CHANGED) {
 				handleUserPaint();
 			}
@@ -1062,6 +1301,17 @@ void GrimEngine::restoreGRIM() {
 	_savedState->endSection();
 }
 
+void GrimEngine::storeSaveGameMetadata(SaveGame *state) {
+	if (!(g_grim->getGameFlags() & ADGF_REMASTERED)) {
+		return;
+	}
+	state->beginSection('META');
+	state->writeString(_saveMeta1);
+	state->writeLEUint32(_saveMeta2);
+	state->writeString(_saveMeta3);
+	state->endSection();
+}
+
 void GrimEngine::storeSaveGameImage(SaveGame *state) {
 	const Graphics::PixelFormat image_format = Graphics::PixelFormat(2, 5, 6, 5, 0, 11, 5, 0, 0);
 	int width = 250, height = 188;
@@ -1102,9 +1352,10 @@ void GrimEngine::savegameSave() {
 	_savedState = SaveGame::openForSaving(filename);
 	if (!_savedState) {
 		//TODO: Translate this!
-		GUI::displayErrorDialog("Error: the game could not be saved.");
+		GUI::displayErrorDialog(_("Error: the game could not be saved."));
 		return;
 	}
+	storeSaveGameMetadata(_savedState);
 
 	storeSaveGameImage(_savedState);
 
@@ -1358,6 +1609,11 @@ void GrimEngine::setMovieSubtitle(TextObject *to) {
 	}
 }
 
+void GrimEngine::drawMovieSubtitle() {
+	if (_movieSubtitle)
+		_movieSubtitle->draw();
+}
+
 void GrimEngine::setMovieSetup() {
 	_movieSetup = _currSet->getCurrSetup()->_name;
 }
@@ -1379,9 +1635,8 @@ void GrimEngine::clearEventQueue() {
 
 bool GrimEngine::hasFeature(EngineFeature f) const {
 	return
-		(f == kSupportsRTL) ||
-		(f == kSupportsLoadingDuringRuntime) ||
-		(f == kSupportsJoystick);
+		(f == kSupportsReturnToLauncher) ||
+		(f == kSupportsLoadingDuringRuntime);
 }
 
 void GrimEngine::pauseEngineIntern(bool pause) {
@@ -1410,23 +1665,53 @@ Graphics::Surface *loadPNG(const Common::String &filename) {
 	return srf;
 }
 
-void GrimEngine::setSideTextures(const Common::String &setup) {
-	if (! g_system->hasFeature(OSystem::kFeatureSideTextures))
-			return;
-	Graphics::Surface *t1 = loadPNG(Common::String::format("%s_left.png", setup.c_str()));
-	Graphics::Surface *t2 = loadPNG(Common::String::format("%s_right.png", setup.c_str()));
-	g_system->suggestSideTextures(t1, t2);
-	if (t1)
-		t1->free();
-	if (t2)
-		t2->free();
-	delete t1;
-	delete t2;
-}
-
-
 void GrimEngine::debugLua(const Common::String &str) {
 	lua_dostring(str.c_str());
+}
+
+Common::String GrimEngine::getLanguagePrefix() const {
+	switch (getLanguage()) {
+		case 0:
+			return Common::String("en");
+		case 1:
+			return Common::String("de");
+		case 2:
+			return Common::String("es");
+		case 3:
+			return Common::String("fr");
+		case 4:
+			return Common::String("it");
+		case 5:
+			return Common::String("pt");
+		default:
+			error("Unknown language id %d", getLanguage());
+	}
+}
+
+bool GrimEngine::isConceptEnabled(uint32 number) const {
+	assert (number < kNumConcepts);
+	return _conceptEnabled[number];
+}
+
+void GrimEngine::enableConcept(uint32 number) {
+	assert (number < kNumConcepts);
+	_conceptEnabled[number] = true;
+}
+	
+bool GrimEngine::isCutsceneEnabled(uint32 number) const {
+	assert (number < kNumCutscenes);
+	return _cutsceneEnabled[number];
+}
+
+void GrimEngine::enableCutscene(uint32 number) {
+	assert (number < kNumCutscenes);
+	_cutsceneEnabled[number] = true;
+}
+
+void GrimEngine::setSaveMetaData(const char *meta1, int meta2, const char *meta3) {
+	_saveMeta1 = meta1;
+	_saveMeta2 = meta2;
+	_saveMeta3 = meta3;
 }
 
 } // end of namespace Grim

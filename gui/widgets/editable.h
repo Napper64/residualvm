@@ -42,8 +42,9 @@ namespace GUI {
 class EditableWidget : public Widget, public CommandSender {
 public:
 	typedef Common::String String;
+	typedef Common::U32String U32String;
 protected:
-	String		_editString;
+	U32String	_editString;
 
 	uint32		_cmd;
 
@@ -55,23 +56,26 @@ protected:
 
 	int			_editScrollOffset;
 
+	Graphics::TextAlign _align;
+	Graphics::TextAlign _drawAlign;
+
 	ThemeEngine::FontStyle  _font;
 
 	ThemeEngine::TextInversionState  _inversion;
 
 public:
-	EditableWidget(GuiObject *boss, int x, int y, int w, int h, const char *tooltip = 0, uint32 cmd = 0);
-	EditableWidget(GuiObject *boss, const String &name, const char *tooltip = 0, uint32 cmd = 0);
-	virtual ~EditableWidget();
+	EditableWidget(GuiObject *boss, int x, int y, int w, int h, const Common::U32String &tooltip = Common::U32String(""), uint32 cmd = 0);
+	EditableWidget(GuiObject *boss, const String &name, const Common::U32String &tooltip = Common::U32String(""), uint32 cmd = 0);
+	~EditableWidget() override;
 
 	void init();
 
-	virtual void setEditString(const String &str);
-	virtual const String &getEditString() const		{ return _editString; }
+	virtual void setEditString(const U32String &str);
+	virtual const U32String &getEditString() const		{ return _editString; }
 
-	virtual void handleTickle();
-	virtual bool handleKeyDown(Common::KeyState state);
-	virtual void reflowLayout();
+	void handleTickle() override;
+	bool handleKeyDown(Common::KeyState state) override;
+	void reflowLayout() override;
 
 	bool setCaretPos(int newPos);
 

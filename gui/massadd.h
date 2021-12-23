@@ -36,12 +36,13 @@ class StaticTextWidget;
 
 class MassAddDialog : public Dialog {
 	typedef Common::Array<Common::String> StringArray;
+	typedef Common::Array<Common::U32String> U32StringArray;
 public:
 	MassAddDialog(const Common::FSNode &startDir);
 
 	//void open();
-	void handleCommand(CommandSender *sender, uint32 cmd, uint32 data);
-	void handleTickle();
+	void handleCommand(CommandSender *sender, uint32 cmd, uint32 data) override;
+	void handleTickle() override;
 
 	Common::String getFirstAddedTarget() const {
 		if (!_games.empty())

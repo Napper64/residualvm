@@ -25,6 +25,7 @@
 
 #include "engines/engine.h"
 #include "common/events.h"
+#include "common/str-array.h"
 
 struct ADGameDescription;
 
@@ -63,15 +64,20 @@ public:
 	/** Build a save file name for the specified target and slot */
 	static Common::String formatSaveName(const char *target, int slot);
 
+	/** List all the save file names for the specified target */
+	static Common::StringArray listSaveNames(const char *target);
+
+	/** Extract the save slot number from the provided save file name */
+	static int getSaveNameSlot(const char *target, const Common::String &saveName);
+
 protected:
 	// Engine APIs
 	Common::Error run() override;
-	GUI::Debugger *getDebugger() override { return (GUI::Debugger *)_console; }
 	bool hasFeature(EngineFeature f) const override;
 	bool canLoadGameStateCurrently() override;
 	bool canSaveGameStateCurrently() override;
 	Common::Error loadGameState(int slot) override;
-	Common::Error saveGameState(int slot, const Common::String &desc) override;
+	Common::Error saveGameState(int slot, const Common::String &desc, bool isAutosave = false) override;
 	void pauseEngineIntern(bool pause) override;
 
 private:
@@ -81,18 +87,15 @@ private:
 	void onScreenChanged() const;
 	void addModsToSearchPath() const;
 	static void checkRecommendedDatafiles();
-	void tryAutoSaving();
 
 	Gfx::FrameLimiter *_frameLimiter;
-	Console *_console;
+	PauseToken _gamePauseToken;
 
 	const ADGameDescription *_gameDescription;
 
 	// Double click handling
 	static const uint _doubleClickDelay = 500; // ms
 	uint _lastClickTime;
-
-	uint32 _lastAutoSaveTime;
 };
 
 } // End of namespace Stark

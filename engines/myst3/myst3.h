@@ -30,7 +30,7 @@
 #include "common/system.h"
 #include "common/random.h"
 
-#include "engines/myst3/directorysubentry.h"
+#include "engines/myst3/archive.h"
 
 namespace Graphics {
 struct Surface;
@@ -91,7 +91,6 @@ protected:
 	// Engine APIs
 	virtual Common::Error run() override;
 	virtual void syncSoundSettings() override;
-	virtual GUI::Debugger *getDebugger() override { return (GUI::Debugger *)_console; }
 	virtual void pauseEngineIntern(bool pause) override;
 
 public:
@@ -122,18 +121,18 @@ public:
 
 	bool canSaveGameStateCurrently() override;
 	bool canLoadGameStateCurrently() override;
-	void tryAutoSaving();
 	Common::Error loadGameState(int slot) override;
-	Common::Error saveGameState(int slot, const Common::String &desc) override;
 	Common::Error loadGameState(Common::String fileName, TransitionType transition);
+	Common::Error saveGameState(int slot, const Common::String &desc, bool isAutosave = false) override;
+	Common::Error saveGameState(const Common::String &desc, const Graphics::Surface *thumbnail, bool isAutosave);
 
-	const DirectorySubEntry *getFileDescription(const Common::String &room, uint32 index, uint16 face,
-	                                            DirectorySubEntry::ResourceType type);
-	DirectorySubEntryList listFilesMatching(const Common::String &room, uint32 index, uint16 face,
-	                                        DirectorySubEntry::ResourceType type);
+	ResourceDescription getFileDescription(const Common::String &room, uint32 index, uint16 face,
+	                                            Archive::ResourceType type);
+	ResourceDescriptionArray listFilesMatching(const Common::String &room, uint32 index, uint16 face,
+	                                        Archive::ResourceType type);
 
 	Graphics::Surface *loadTexture(uint16 id);
-	static Graphics::Surface *decodeJpeg(const DirectorySubEntry *jpegDesc);
+	static Graphics::Surface *decodeJpeg(const ResourceDescription *jpegDesc);
 
 	void goToNode(uint16 nodeID, TransitionType transition);
 	void loadNode(uint16 nodeID, uint32 roomID = 0, uint32 ageID = 0);
@@ -193,7 +192,6 @@ public:
 
 private:
 	OSystem *_system;
-	Console *_console;
 	const Myst3GameDescription *_gameDescription;
 
 	Node *_node;
@@ -224,8 +222,6 @@ private:
 	bool _inputTildePressed;
 
 	bool _interactive;
-
-	uint32 _lastSaveTime;
 
 	uint32 _backgroundSoundScriptLastRoomId;
 	uint32 _backgroundSoundScriptLastAgeId;

@@ -184,7 +184,7 @@ void outputMessage(j_common_ptr cinfo) {
 }
 
 J_COLOR_SPACE fromScummvmPixelFormat(const Graphics::PixelFormat &format) {
-#if defined(JCS_EXTENSIONS) or defined(JCS_ALPHA_EXTENSIONS)
+#if defined(JCS_EXTENSIONS) || defined(JCS_ALPHA_EXTENSIONS)
 	struct PixelFormatMapping {
 		Graphics::PixelFormat pixelFormat;
 		J_COLOR_SPACE bigEndianColorSpace;
@@ -200,7 +200,7 @@ J_COLOR_SPACE fromScummvmPixelFormat(const Graphics::PixelFormat &format) {
 		{ Graphics::PixelFormat(3, 8, 8, 8, 0, 16,  8,  0,  0), JCS_EXT_RGB,  JCS_EXT_BGR  },
 		{ Graphics::PixelFormat(3, 8, 8, 8, 0,  0,  8, 16,  0), JCS_EXT_BGR,  JCS_EXT_RGB  }
 #endif
-#if defined(JCS_EXTENSIONS) and defined(JCS_ALPHA_EXTENSIONS)
+#if defined(JCS_EXTENSIONS) && defined(JCS_ALPHA_EXTENSIONS)
 		,
 #endif
 #ifdef JCS_ALPHA_EXTENSIONS
@@ -268,6 +268,8 @@ bool JPEGDecoder::loadStream(Common::SeekableReadStream &stream) {
 	case kColorSpaceYUV:
 		cinfo.out_color_space = JCS_YCbCr;
 		break;
+	default:
+		break;
 	}
 
 	// Actually start decompressing the image
@@ -289,6 +291,8 @@ bool JPEGDecoder::loadStream(Common::SeekableReadStream &stream) {
 		// We use YUV with 3 bytes per pixel otherwise.
 		// This is pretty ugly since our PixelFormat cannot express YUV...
 		_surface.create(cinfo.output_width, cinfo.output_height, Graphics::PixelFormat(3, 0, 0, 0, 0, 0, 0, 0, 0));
+		break;
+	default:
 		break;
 	}
 

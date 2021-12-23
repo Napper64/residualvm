@@ -29,6 +29,16 @@
 
 namespace Common {
 
+/**
+ * @defgroup common_ini_file INI files
+ * @ingroup common
+ *
+ * @brief API for operations on INI configuration files.
+ *
+ *		
+ * @{
+ */
+
 class SeekableReadStream;
 class WriteStream;
 
@@ -78,7 +88,7 @@ public:
 
 public:
 	INIFile();
-	~INIFile();
+	~INIFile() {}
 
 	// TODO: Maybe add a copy constructor etc.?
 
@@ -88,7 +98,7 @@ public:
 	 * underscores. In particular, white space and "#", "=", "[", "]"
 	 * are not valid!
 	 */
-	static bool isValidName(const String &name);
+	bool isValidName(const String &name) const;
 
 	/** Reset everything stored in this ini file. */
 	void	clear();
@@ -105,6 +115,8 @@ public:
 	void	removeSection(const String &section);
 	void	renameSection(const String &oldName, const String &newName);
 
+	void	setDefaultSectionName(const String &name); ///< sets initial section name for section-less ini files
+
 	bool	hasKey(const String &key, const String &section) const;
 	bool	getKey(const String &key, const String &section, String &value) const;
 	void	setKey(const String &key, const String &section, const String &value);
@@ -115,12 +127,18 @@ public:
 
 	void listKeyValues(StringMap &kv);
 
+	void allowNonEnglishCharacters();
+
 private:
+	String		_defaultSectionName;
 	SectionList _sections;
+	bool _allowNonEnglishCharacters;
 
 	Section *getSection(const String &section);
 	const Section *getSection(const String &section) const;
 };
+
+/** @} */
 
 } // End of namespace Common
 

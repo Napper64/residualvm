@@ -30,14 +30,22 @@
 #include "backends/events/sdl/sdl-events.h"
 #include "backends/log/log.h"
 #include "backends/platform/sdl/sdl-window.h"
-#include "backends/graphics/sdl/resvm-sdl-graphics.h"
 
 #include "common/array.h"
+
+#ifdef USE_DISCORD
+class DiscordPresence;
+#endif
+// ResidualVM - Start
+#ifdef USE_OPENGL
+#include "backends/graphics3d/openglsdl/openglsdl-graphics3d.h"
+#endif
+// ResidualVM - End
 
 /**
  * Base OSystem class for all SDL ports.
  */
-class OSystem_SDL : public ModularBackend {
+class OSystem_SDL : public ModularMutexBackend, public ModularMixerBackend, public ModularGraphicsBackend {
 public:
 	OSystem_SDL();
 	virtual ~OSystem_SDL();
@@ -47,52 +55,48 @@ public:
 	 * instantiating the backend. Early needed managers are
 	 * created here.
 	 */
-	virtual void init();
+	virtual void init() override;
 
-	/**
-	 * Get the Mixer Manager instance. Not to confuse with getMixer(),
-	 * that returns Audio::Mixer. The Mixer Manager is a SDL wrapper class
-	 * for the Audio::Mixer. Used by other managers.
-	 */
-	virtual SdlMixerManager *getMixerManager();
-
-	virtual bool hasFeature(Feature f);
+	virtual bool hasFeature(Feature f) override;
 
 	// Override functions from ModularBackend and OSystem
-	virtual void initBackend();
-	virtual void engineInit();
-	virtual void engineDone();
-	virtual void quit();
-	virtual void fatalError();
+	virtual void initBackend() override;
+	virtual void engineInit() override;
+	virtual void engineDone() override;
+	virtual void quit() override;
+	virtual void fatalError() override;
+	Common::KeymapArray getGlobalKeymaps() override;
+	Common::HardwareInputSet *getHardwareInputSet() override;
 
 	// Logging
-	virtual void logMessage(LogMessageType::Type type, const char *message);
+	virtual void logMessage(LogMessageType::Type type, const char *message) override;
 
-	virtual Common::String getSystemLanguage() const;
+	virtual Common::String getSystemLanguage() const override;
 
+#if SDL_VERSION_ATLEAST(2, 0, 0)
 	// Clipboard
-	virtual bool hasTextInClipboard();
-	virtual Common::String getTextFromClipboard();
-	virtual bool setTextInClipboard(const Common::String &text);
+	virtual bool hasTextInClipboard() override;
+	virtual Common::U32String getTextFromClipboard() override;
+	virtual bool setTextInClipboard(const Common::U32String &text) override;
+#endif
 
-	virtual void setWindowCaption(const char *caption);
-	virtual void addSysArchivesToSearchSet(Common::SearchSet &s, int priority = 0);
-	virtual uint32 getMillis(bool skipRecord = false);
-	virtual void delayMillis(uint msecs);
-	virtual void getTimeAndDate(TimeDate &td) const;
-	virtual Audio::Mixer *getMixer();
-	virtual Common::TimerManager *getTimerManager();
-	virtual Common::SaveFileManager *getSavefileManager();
+	virtual void setWindowCaption(const char *caption) override;
+	virtual void addSysArchivesToSearchSet(Common::SearchSet &s, int priority = 0) override;
+	virtual uint32 getMillis(bool skipRecord = false) override;
+	virtual void delayMillis(uint msecs) override;
+	virtual void getTimeAndDate(TimeDate &td) const override;
+	virtual MixerManager *getMixerManager() override;
+	virtual Common::TimerManager *getTimerManager() override;
+	virtual Common::SaveFileManager *getSavefileManager() override;
 
 	//Screenshots
 	virtual Common::String getScreenshotsPath();
 
-	// ResidualVM specific code
-	virtual void setupScreen(uint screenW, uint screenH, bool fullscreen, bool accel3d) override;
-	// ResidualVM specific code
-	virtual void launcherInitSize(uint w, uint h) override;
-	// ResidualVM specific code
-	Common::Array<uint> getSupportedAntiAliasingLevels() const;
+	// ResidualVM - Start
+#ifdef USE_OPENGL
+	Common::Array<uint> getSupportedAntiAliasingLevels() const override;
+#endif
+	// ResidualVM - End
 
 protected:
 	bool _inited;
@@ -101,31 +105,42 @@ protected:
 	bool _initedSDLnet;
 #endif
 
+#ifdef USE_DISCORD
+	DiscordPresence *_presence;
+#endif
+
 	/**
-	 * Mixer manager that configures and setups SDL for
-	 * the wrapped Audio::Mixer, the true mixer.
+	 * The path of the currently open log file, if any.
+	 *
+	 * @note This is currently a string and not an FSNode for simplicity;
+	 * e.g. we don't need to include fs.h here, and currently the
+	 * only use of this value is to use it to open the log file in an
+	 * editor; for that, we need it only as a string anyway.
 	 */
-	SdlMixerManager *_mixerManager;
+	Common::String _logFilePath;
 
 	/**
 	 * The event source we use for obtaining SDL events.
 	 */
 	SdlEventSource *_eventSource;
+	Common::EventSource *_eventSourceWrapper;
 
 	/**
 	 * The SDL output window.
 	 */
 	SdlWindow *_window;
 
-	// ResidualVM specific code
+	// ResidualVM specific code - start
+	SdlGraphicsManager::State _gfxManagerState;
+
+#ifdef USE_OPENGL
 	// Graphics capabilities
-	void detectDesktopResolution();
 	void detectFramebufferSupport();
 	void detectAntiAliasingSupport();
-	ResVmSdlGraphicsManager::Capabilities _capabilities;
+	OpenGLSdlGraphics3dManager::Capabilities _capabilities;
+#endif
 	// End of ResidualVM specific code
 
-	virtual Common::EventSource *getDefaultEventSource() { return _eventSource; }
 
 	/**
 	 * Initialze the SDL library.
@@ -138,8 +153,31 @@ protected:
 	virtual AudioCDManager *createAudioCDManager();
 
 	// Logging
-	virtual Common::WriteStream *createLogFile() { return 0; }
+	virtual Common::String getDefaultLogFileName() { return Common::String(); }
+	virtual Common::WriteStream *createLogFile();
 	Backends::Log::Log *_logger;
+
+#ifdef USE_OPENGL
+	typedef Common::Array<GraphicsMode> GraphicsModeArray;
+	GraphicsModeArray _graphicsModes;
+	Common::Array<int> _graphicsModeIds;
+	int _graphicsMode;
+	int _firstGLMode;
+	int _defaultSDLMode;
+	int _defaultGLMode;
+
+	/**
+	 * Creates the merged graphics modes list
+	 */
+	void setupGraphicsModes();
+
+	virtual const OSystem::GraphicsMode *getSupportedGraphicsModes() const override;
+	virtual int getDefaultGraphicsMode() const override;
+	virtual bool setGraphicsMode(int mode, uint flags) override; // ResidualVM
+	virtual int getGraphicsMode() const override;
+#endif
+protected:
+	virtual char *convertEncoding(const char *to, const char *from, const char *string, size_t length) override;
 };
 
 #endif
